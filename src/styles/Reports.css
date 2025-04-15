@@ -1,0 +1,272 @@
+/* Essential styles only */
+
+/* Container and layout */
+.reports-container {
+    width: 100%;
+    margin: 0 auto;
+    padding: 24px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+.reports-main-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.reports-content {
+    max-width: 95%;
+    margin: 0 auto;
+    background-color: white;
+    padding: 24px;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Header section */
+.back-button {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+    background: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 16px;
+    cursor: pointer;
+}
+
+.page-title {
+    font-size: 24px;
+    font-weight: 600;
+    margin: 0;
+}
+
+/* Reports header */
+.reports-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.reports-title {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.reports-title h2 {
+    font-size: 20px;
+    font-weight: 600;
+    color: #111827;
+    margin: 0;
+}
+
+.reports-subtitle {
+    font-size: 14px;
+    color: #6B7280;
+    margin: 0;
+}
+
+/* Filter section */
+.reports-filter-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    padding: 16px 0;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.reports-filter-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.reports-dropdown {
+    padding: 8px 32px 8px 16px;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    font-size: 14px;
+    color: #374151;
+    background-color: white;
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,...");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+}
+
+/* Buttons */
+.reports-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.reports-btn.active {
+    background-color: #3B82F6;
+    color: white;
+    border: none;
+}
+
+.reports-btn.secondary {
+    background-color: white;
+    color: #3B82F6;
+    border: 1px solid #3B82F6;
+}
+
+.reports-btn.secondary:hover:not(:disabled) {
+    background-color: #2563EB;
+    color: white;
+}
+
+.reports-btn.secondary.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    border-color: #D1D5DB;
+    color: #6B7280;
+    background-color: #F3F4F6;
+}
+
+/* Search */
+.reports-search {
+    position: relative;
+    width: 320px;
+}
+
+.reports-search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #9CA3AF;
+}
+
+.reports-search-input {
+    width: 100%;
+    padding: 8px 16px 8px 36px;
+    border: 1px solid #E5E7EB;
+    border-radius: 8px;
+    font-size: 14px;
+    color: #111827;
+}
+
+/* Table */
+.table-container {
+    overflow-x: auto;
+}
+
+.reports-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.reports-table th, 
+.reports-table td {
+    padding: 12px 16px;
+    text-align: left;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.reports-table th {
+    font-size: 12px;
+    font-weight: 500;
+    color: #374151;
+    background-color: #f9fafb;
+}
+
+.reports-table td {
+    font-size: 14px;
+    color: #111827;
+}
+
+/* Category badges */
+.category-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 12px;
+    border-radius: 16px;
+    font-size: 12px;
+    font-weight: 500;
+    min-width: 80px;
+}
+
+[data-category="COA"] {
+    background-color: #F0F9FF;
+    color: #0284C7;
+    border: 1px solid #BAE6FD;
+}
+
+[data-category="M Team"] {
+    background-color: #FFF7ED;
+    color: #C2410C;
+    border: 1px solid #FED7AA;
+}
+
+[data-category="Academic"] {
+    background-color: #F5F3FF;
+    color: #6D28D9;
+    border: 1px solid #DDD6FE;
+}
+
+.coa {
+    background-color: #EFF6FF;
+    color: #2563EB;
+}
+
+.mteam {
+    background-color: #F0FDF4;
+    color: #059669;
+}
+
+.academic {
+    background-color: #FEF2F2;
+    color: #DC2626;
+}
+
+/* Download link */
+.download-link {
+    color: #2563EB;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+/* Pagination */
+.pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 24px;
+    border-top: 1px solid #e5e7eb;
+}
+
+.pagination-buttons {
+    display: flex;
+    gap: 12px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .reports-filter-section {
+        flex-direction: column;
+        gap: 16px;
+    }
+    
+    .reports-search {
+        width: 100%;
+    }
+}
+

@@ -1,0 +1,260 @@
+html, body {
+  height: fit-content;
+  margin: 0;
+  padding: 0;
+  background-color: #f8f9fa; /* Set background color for the entire page */
+}
+
+.main-container {
+  display: flex;
+  padding: 2rem;
+  background-color: #F5F9FF; /* Match the background color */
+  gap: 2rem;
+  font-family: Arial, sans-serif;
+}
+.main-container::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari and Opera */
+}
+
+/* Left Panel Styles */
+.left-panel {
+  flex: 2;
+  background-color: #F5F9FF; /* Set background color to white */
+  padding: 1rem;
+}
+.left-panel::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari and Opera */
+}
+
+.tabs {
+  display: flex;
+  justify-content: space-around;
+  gap: 1rem;
+  border-bottom: 1px solid #e2e8f0;
+  max-width: 100%;
+  margin: 0 auto 1.5rem auto;
+  background-color: #ffffff;
+  border-radius: 0.375rem;
+  position: relative;
+  z-index: 10;
+}
+
+.tab {
+  width: 50%;
+  padding: 0.75rem 1rem;
+  background-color: white; /* Set background color to white when inactive */
+  border-radius: 0.375rem;
+  border: none;
+  cursor: pointer;
+  color: #6c788a;
+  font-weight: 500;
+  position: relative;
+  transition: color 0.3s ease, background-color 0.3s ease, transform 0.3s ease;
+  text-align: center; /* Center the text */
+  z-index: 10;
+}
+
+.active-tab {
+  color: #ffffff;
+  background-color: #007bff;
+  border-radius: 0.375rem;
+  z-index: 10;
+}
+
+.search-bar {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  margin-top: 1rem;
+  position: relative;
+  z-index: 5;
+}
+
+.search-bar input {
+  flex: 1;
+  padding: 0.75rem;
+  border: 1px solid #e0e0e0;
+  border-radius: 0.5rem;
+  outline: none; /* Remove black stroke on click */
+}
+
+.filter-btn {
+  padding: 0.75rem 1.5rem;
+  background-color: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 0.5rem;
+  color: #666;
+  outline: none; /* Remove black stroke on click */
+}
+
+.meeting-card {
+  background: white;
+  border-radius: 1rem;
+  padding: 0.8rem; /* Reduced padding */
+  margin-bottom: 1rem; /* Reduced margin */
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  transition: transform 0.2s;
+  width: 100%; /* Increased width */
+  font-size: 0.8rem; /* Reduced font size */
+  gap: 5px; /* Reduced gap */
+}
+
+.meeting-card:hover {
+  transform: translateY(-2px);
+}
+
+.meeting-type-banner {
+  background-color: #EBF5FF;
+  color: #0066FF;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.meeting-type-banner i {
+  color: #0066FF;
+  font-size: 1.1rem;
+}
+
+.meeting-title h3 {
+  color: #1A1A1A;
+  font-size: 1rem; /* Adjusted font size */
+  font-weight: 600;
+}
+
+.meeting-details {
+  color: #4D4D4D;
+  font-size: 0.9rem;
+}
+
+.meeting-details i {
+  color: #0066FF;
+  font-size: 1rem;
+}
+
+.progress-section {
+  background-color: #F5F5F5;
+  padding: 1rem;
+  border-radius: 0.75rem;
+  margin: 1rem 0;
+}
+
+.progress-header {
+  color: #4D4D4D;
+  font-size: 0.9rem;
+  margin-bottom: 0.75rem;
+}
+
+.progress-bar {
+  height: 0.5rem;
+  background-color: #E6E6E6;
+  border-radius: 1rem;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background-color: #0066FF;
+  border-radius: 1rem;
+  transition: width 0.3s ease;
+}
+
+.priority-tag {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: #F3E8FF;
+  color: #7C3AED;
+  padding: 0.5rem 1rem;
+  border-radius: 2rem;
+  font-weight: 500;
+  font-size: 0.9rem; /* Adjusted font size */
+}
+
+.priority-dot {
+  width: 8px;
+  height: 8px;
+  background-color: #7C3AED;
+  border-radius: 50%;
+}
+
+.deadline-tag {
+  display: flex;
+  align-items: center;
+  color: #FF5733;
+  font-size: 0.9rem;
+  font-weight: 500;
+  background-color: #FFF5F2;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+}
+
+.deadline-tag i {
+  color: #FF5733;
+  font-size: 1rem;
+}
+
+.meeting-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.meeting-details {
+  margin: 0.75rem 0;
+  color: black;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.meeting-description {
+  color: black;
+  margin-bottom: 0.75rem;
+}
+
+.host-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.host-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+}
+
+.meeting-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 1rem 0;
+}
+
+.no-todo-container {
+  display: flex;
+  flex-direction: column; 
+  align-items: center;
+  height: 100%;
+  background-color: #F5F9FF; /* Match the background color */
+}
+
+.no-todo-image {
+  max-width: 50%;
+  height: auto;
+  background-color: #F5F9FF; /* Match the background color */
+}
+
+.no-todo-message {
+  text-align: center;
+  color: #6c788a;
+  font-size: 2rem;
+  font-weight: bold;
+  margin-top: 1rem;
+}
+

@@ -1,0 +1,35 @@
+*{
+  box-sizing: border-box;
+}
+.App {
+  display: flex;
+  background-color: #F5F9FF; /* Set the background color */
+  
+}
+.App::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari and Opera */
+}
+
+.main-content {
+  flex: 1;
+  margin-left: 76px; /* Adjust based on the width of the sidebar */
+  padding: 20px;
+  height: fit-content;
+}
+.main-content::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari and Opera */
+}
+
+.full-content {
+  flex: 1;
+  padding: 20px;
+  height: 100vh;
+}
+.full-content::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari and Opera */
+}
+
+.sidebar {
+  width: 76px; /* Adjust based on the width of the sidebar */
+  /* Add any additional styles for the sidebar */
+}

@@ -1,0 +1,164 @@
+/* Base Layout */
+.min-h-screen {
+  max-height: 100vh;
+  background-color: #f8f9fd;
+  padding: 1.5rem;
+}
+
+.cm-container {
+  min-height: 100vh;
+  padding: 20px;
+}
+
+.cm-tab-content {
+  max-width: 90%;
+  padding: 40px;
+  margin: 0 auto;
+  background-color: white;
+  border-radius: 1rem;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.05);
+  border: 1px solid #edf2f7;
+}
+
+/* Header Styles from CreateMeeting.css */
+.cm-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.cm-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cm-header-right {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 5px;
+  background-color: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.cm-back-button {
+  background-color: white;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.cm-title {
+  font-size: 24px;
+  font-weight: bold;
+}
+
+/* Button Styles */
+.cm-btn {
+  padding: 8px 16px;
+  border-radius: 4px;
+  border: none;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cm-preview-btn {
+  background-color: #ffffff;
+  border: 1px solid #1967d2;
+  color: #1967d2;
+}
+
+.cm-preview-btn:hover {
+  background-color: #368dff;
+  color: #ffffff;
+}
+
+.cm-draft-btn {
+  background-color: #537288;
+  color: white;
+}
+
+.cm-draft-btn:hover {
+  background-color: #445f71;
+}
+
+.cm-create-btn {
+  background-color: #1967d2;
+  color: white;
+}
+
+.cm-create-btn:hover {
+  background-color: #2563eb;
+}
+
+/* Document Container */
+.document-header {
+  width: 100%;
+  margin: 0 auto 1rem auto;
+}
+
+/* Notification Styles */
+.notification-card {
+  background: white;
+  padding: 24px;
+  border-radius: 8px;
+  text-align: center;
+  max-width: 400px;
+}
+
+.icon-circle {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #e8f5e9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px;
+}
+
+.notification-title {
+  font-size: 20px;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.notification-description {
+  color: #666;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* Institution Header */
+.header {
+  width: 100%;
+  margin: 0 auto 1rem auto;
+}
+
+/* Table Layout */
+.meeting-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: white;
+}
+
+.meeting-table th,
+.meeting-table td {
+  border: 1px solid #e2e8f0;
+}
+
+.table-label {
+  width: 150px;
+  padding: 12px 16px;
+  background-color: #f8fafc;
+  font-weight: 500;
+  color: #2d3748;
+  border: 1px solid #e2e8f0;
+}
