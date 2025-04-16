@@ -34,8 +34,9 @@ const Dashboard = () => {
           type: `Info: ${meeting.role}`,
           title: meeting.meeting_name,
           date: dayjs(meeting.start_time).format("dddd, D MMMM, YYYY"),
+          time: dayjs(meeting.start_time).format("h:mm A"),
           duration: dayjs(meeting.end_time).diff(dayjs(meeting.start_time), 'minute') + " min",
-          location: "Venue ID: " + meeting.venue_id,
+          location: meeting.venue_name, // updated line
           description: meeting.meeting_description,
           host: `${meeting.created_by}`,
           priority: meeting.priority.toUpperCase() + " PRIORITY",
@@ -46,7 +47,6 @@ const Dashboard = () => {
           points: meeting.points,
           host_id: meeting.created_by_id
         }));
-
         setMeetings(formattedMeetings);
       }
     } catch (error) {

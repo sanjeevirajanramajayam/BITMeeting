@@ -1,93 +1,109 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Box, Typography, Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, IconButton } from "@mui/material";
 import Autocomplete from '@mui/material/Autocomplete';
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-
 import AttendanceIcon from "@mui/icons-material/HowToReg";
 import AgendaIcon from "@mui/icons-material/Groups";
 import ForwardingForm from "./MeetingPage2";
 import image from "../assets/bannariammanheader.png";
 import { useNavigate } from "react-router-dom";
 import { useLocation } from 'react-router-dom';
+import axios from "axios";
+
+// Table cell styles
+const cellStyle = {
+    border: "1px solid #ddd",
+    padding: "12px",
+    fontWeight: "bold",
+};
+
+const headerCellStyle = {
+    ...cellStyle,
+    backgroundColor: "#f0f0f0",
+    fontWeight: "bold",
+};
+
+const headerStyle = {
+    ...headerCellStyle,
+    textAlign: "left",
+};
 
 export default function StartMeet({ handleBack }) {
-
     const location = useLocation();
     const { meetingData } = location.state || {};
-
-    const [status, setStatus] = useState(null);
-    const [onStart, setOnStart] = useState(false);
     const navigate = useNavigate();
 
-    console.log(meetingData)
-
+    // State management
+    const [status, setStatus] = useState(null);
+    const [onStart, setOnStart] = useState(false);
     const [selectedTab, setSelectedTab] = useState("attendance");
     const [isForward, setIsForward] = useState(false);
     const [selectedAction, setSelectedAction] = useState(null);
+    const [points, setPoints] = useState(
+        meetingData.points.map(point => ({
+            ...point,
+            point_status: point.point_status || ""
+        }))
+    );
 
+    const approvePoint = async (pointId, approvedDecision) => {
+        try {
+            const token = localStorage.getItem('token')
+            const sentobj = { pointId, approvedDecision }
+            console.log(sentobj)
+            const response = await axios.post('http://localhost:5000/api/meetings/approve-point', sentobj, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                }
+            })
+            console.log(response.data)
+        }
+        catch (err) {
+            console.log(err)
+        }
+    }
+
+    // Handlers
     const handleForwardClick = (action) => {
         setIsForward(true);
         setSelectedAction(action);
     };
 
-    // const fetchMeetings = async () => {
-    //     try {
-    //       const token = localStorage.getItem('token');
-    //       const meetingId = meetingData.id;
+    const handleStatusChange = (index, newStatus) => {
+        const updatedPoints = [...points];
+        updatedPoints[index].status = newStatus;
+        setPoints(updatedPoints);
+    };
 
-    //       console.log("Token:", token);
-    //       console.log("Meeting ID:", meetingId);
+    const handleChange = (index, field, value) => {
+        const updatedPoints = [...points];
+        updatedPoints[index][field] = value;
+        setPoints(updatedPoints);
+    };
 
-    //       const response = await fetch('http://localhost:5000/api/meetings/get-responsibility', {
-    //         method: 'POST',
-    //         headers: {
-    //           'Content-Type': 'application/json',
-    //           Authorization: `Bearer ${token}`
-    //         },
-    //         body: JSON.stringify({ meetingId })
-    //       });
-
-    //       const data = await response.json();
-
-    //       console.log("Response data:", data);
-
-    //     //   if (data.success) {
-    //     //     const formattedMeetings = data.meetings.map(meeting => ({
-    //     //       id: meeting.id,
-    //     //       type: `Info: ${meeting.role}`,
-    //     //       title: meeting.meeting_name,
-    //     //       date: dayjs(meeting.start_time).format("dddd, D MMMM, YYYY"),
-    //     //       duration: dayjs(meeting.end_time).diff(dayjs(meeting.start_time), 'minute') + " min",
-    //     //       location: `Venue ID: ${meeting.venue_id}`,
-    //     //       description: meeting.meeting_description,
-    //     //       host: `${meeting.created_by}`,
-    //     //       priority: `${meeting.priority.toUpperCase()} PRIORITY`,
-    //     //       deadline: meeting.meeting_status === "not_started" ? "Upcoming" : null,
-    //     //       progress: meeting.meeting_status === "in_progress" ? "40%" : null,
-    //     //       repeat_type: meeting.repeat_type.toUpperCase(),
-    //     //       members: meeting.members
-    //     //     }));
-
-    //     //     setMeetings(formattedMeetings);
-    //     //   } else {
-    //     //     console.warn("Response returned success: false", data);
-    //     //   }
-
-    //     } catch (error) {
-    //       console.error("Failed to fetch meetings:", error);
-    //     }
-    //   };
-
-
-    //   useEffect(() => {
-    //     fetchMeetings();
-    //   }, []);
-
+    useEffect(() => {
+        console.log(meetingData)
+        meetingData.points.forEach((point, index) => {
+            var status = point.approved_by_admin;
+            console.log("status", status)
+            if (status == "NOT APPROVED")
+            {
+                status = "Not Approve"
+            }
+            else if (status == "APPROVED") {
+                status = "Approve"
+            }
+            handleStatusChange(index, status);
+        });
+        
+    }, [])
+    
     return (
         <Box>
+            {/* Header Section */}
             <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", gap: 50 }}>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                     <Box sx={{ display: "flex", padding: "5px", backgroundColor: "white" }}>
@@ -99,8 +115,9 @@ export default function StartMeet({ handleBack }) {
                             {meetingData?.location} • {meetingData?.date}
                         </Typography>
                     </Typography>
-
                 </Box>
+
+                {/* Action Buttons */}
                 {!onStart ? (
                     <Box sx={{ display: "flex", alignItems: "center", gap: 2, padding: "6px", backgroundColor: "white", borderRadius: "8px" }}>
                         <Button
@@ -125,7 +142,10 @@ export default function StartMeet({ handleBack }) {
                         <Button
                             variant="contained"
                             sx={{
-                                borderRadius: '5px', backgroundColor: "#6c757d", textTransform: "none", gap: "8px",
+                                borderRadius: '5px',
+                                backgroundColor: "#6c757d",
+                                textTransform: "none",
+                                gap: "8px",
                                 "&:hover": { backgroundColor: "#5a6268" },
                             }}
                         >
@@ -143,7 +163,6 @@ export default function StartMeet({ handleBack }) {
                                 "&:hover": { backgroundColor: "#0069d9" },
                             }}
                             onClick={() => setOnStart(true)}
-
                         >
                             <AutoAwesomeOutlinedIcon sx={{ fontSize: "18px" }} />
                             Start Meeting
@@ -162,6 +181,8 @@ export default function StartMeet({ handleBack }) {
                     </Box>
                 )}
             </Box>
+
+            {/* Tab Selection */}
             {onStart && (
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', borderRadius: 2, padding: '4px', backgroundColor: 'white', gap: 2, width: '800px', margin: '0 auto', marginBottom: '10px' }}>
                     <Button
@@ -197,8 +218,12 @@ export default function StartMeet({ handleBack }) {
                     </Button>
                 </Box>
             )}
+
+            {/* Main Content */}
             <Box sx={{ display: "flex", backgroundColor: "white", justifyContent: "center", alignItems: "center", flexDirection: 'column', width: "90%", margin: "0 auto", paddingX: '40px' }}>
                 <img src={image} alt="Example" style={{ width: "50%", height: "50%", padding: "10px" }} />
+
+                {/* Meeting Details Table */}
                 <TableContainer sx={{ margin: "auto", mt: 3, border: "1px solid #ddd", borderBottom: 'none' }}>
                     <Table sx={{ borderCollapse: "collapse" }}>
                         <TableBody>
@@ -283,17 +308,15 @@ export default function StartMeet({ handleBack }) {
                                 <TableCell colSpan={3} sx={headerStyle}>Member list</TableCell>
                             </TableRow>
 
-                            {Object.entries(meetingData.members).map((member => (
-                                <TableRow>
+                            {Object.entries(meetingData.members).map((member) => (
+                                <TableRow key={member[0]}>
                                     <TableCell sx={cellStyle}>
                                         <TextField
                                             variant="standard"
                                             placeholder="Person"
                                             value={member[0]}
                                             fullWidth
-                                            InputProps={{
-                                                disableUnderline: true,
-                                            }}
+                                            InputProps={{ disableUnderline: true }}
                                         />
                                     </TableCell>
                                     <TableCell colSpan={3} sx={cellStyle}>
@@ -302,15 +325,16 @@ export default function StartMeet({ handleBack }) {
                                             placeholder="Select Member"
                                             fullWidth
                                             value={member[1].map((element) => ` ${element.name}`)}
-                                            InputProps={{
-                                                disableUnderline: true,
-                                            }}
+                                            InputProps={{ disableUnderline: true }}
                                         />
                                     </TableCell>
-                                </TableRow>)))}
+                                </TableRow>
+                            ))}
                         </TableBody>
                     </Table>
                 </TableContainer>
+
+                {/* Dynamic Content Based on Tab Selection */}
                 {onStart && selectedTab === 'attendance' ? (
                     <TableContainer sx={{ margin: "auto", border: "1px solid #ddd", borderTop: "none" }}>
                         <Table sx={{ borderCollapse: "collapse" }}>
@@ -323,54 +347,50 @@ export default function StartMeet({ handleBack }) {
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                <TableRow >
-                                    <TableCell sx={{ ...cellStyle, textAlign: "center" }}></TableCell>
-                                    <TableCell sx={{ ...cellStyle, textAlign: "center" }}></TableCell>
-                                    <TableCell sx={{ ...cellStyle, textAlign: "center" }}></TableCell>
+                                <TableRow>
+                                    <TableCell sx={{ ...cellStyle, textAlign: "center" }}>1</TableCell>
+                                    <TableCell sx={{ ...cellStyle, textAlign: "center" }}>John Doe (Manager)</TableCell>
+                                    <TableCell sx={{ ...cellStyle, textAlign: "center" }}>Chairperson</TableCell>
                                     <TableCell sx={{ ...cellStyle, textAlign: "center" }}>
                                         <Box sx={{ display: 'flex', justifyContent: 'center', gap: 0.5 }}>
-                                            {status !== "Absent" && (
-                                                <Button
-                                                    variant="outlined"
-                                                    sx={{
-                                                        width: '100px',
-                                                        color: "green",
-                                                        borderColor: "green",
-                                                        backgroundColor: "#e6f8e6",
-                                                        textTransform: "none",
-                                                        borderRadius: "14px",
-                                                        fontSize: '10px',
-                                                        gap: 0.5,
-                                                        "&:hover": {
-                                                            backgroundColor: "#d4edda",
-                                                        },
-                                                    }}
-                                                    onClick={() => setStatus("Present")}
-                                                >
-                                                    Present
-                                                </Button>
-                                            )}
-                                            {status !== "Present" && (
-                                                <Button
-                                                    variant="outlined"
-                                                    sx={{
-                                                        width: '100px',
-                                                        color: "red",
-                                                        borderColor: "red",
-                                                        backgroundColor: "#fdecec",
-                                                        textTransform: "none",
-                                                        borderRadius: "14px",
-                                                        fontSize: '10px',
-                                                        gap: 0.5,
-                                                        "&:hover": {
-                                                            backgroundColor: "#f8d7da",
-                                                        },
-                                                    }}
-                                                    onClick={() => setStatus("Absent")}
-                                                >
-                                                    Absent
-                                                </Button>
-                                            )}
+                                            <Button
+                                                variant={status === "Present" ? "contained" : "outlined"}
+                                                sx={{
+                                                    width: '100px',
+                                                    color: status === "Present" ? "white" : "green",
+                                                    borderColor: "green",
+                                                    backgroundColor: status === "Present" ? "green" : "#e6f8e6",
+                                                    textTransform: "none",
+                                                    borderRadius: "14px",
+                                                    fontSize: '10px',
+                                                    gap: 0.5,
+                                                    "&:hover": {
+                                                        backgroundColor: status === "Present" ? "darkgreen" : "#d4edda",
+                                                    },
+                                                }}
+                                                onClick={() => setStatus("Present")}
+                                            >
+                                                Present
+                                            </Button>
+                                            <Button
+                                                variant={status === "Absent" ? "contained" : "outlined"}
+                                                sx={{
+                                                    width: '100px',
+                                                    color: status === "Absent" ? "white" : "red",
+                                                    borderColor: "red",
+                                                    backgroundColor: status === "Absent" ? "red" : "#fdecec",
+                                                    textTransform: "none",
+                                                    borderRadius: "14px",
+                                                    fontSize: '10px',
+                                                    gap: 0.5,
+                                                    "&:hover": {
+                                                        backgroundColor: status === "Absent" ? "darkred" : "#f8d7da",
+                                                    },
+                                                }}
+                                                onClick={() => setStatus("Absent")}
+                                            >
+                                                Absent
+                                            </Button>
                                         </Box>
                                     </TableCell>
                                 </TableRow>
@@ -391,106 +411,107 @@ export default function StartMeet({ handleBack }) {
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                <TableRow>
-                                    <TableCell sx={cellStyle}></TableCell>
-                                    <TableCell sx={{ ...cellStyle, fontWeight: "normal", maxWidth: "300px" }}>
-                                        <TextField
-                                            variant="standard"
-                                            placeholder="Enter discussion topic"
-                                            multiline
-                                            fullWidth
-                                            minRows={1}
-                                            maxRows={4}
-                                            InputProps={{
-                                                disableUnderline: true,
-                                                sx: { fontSize: '14px', fontWeight: 'bold' }
-                                            }}
-                                            onChange={(e) => {
-                                                const updatedPoints = [...discussionPoints];
-                                                updatedPoints[index].point = e.target.value;
-                                                setDiscussionPoints(updatedPoints);
-                                            }}
-                                        />
-                                    </TableCell>
-                                    <TableCell sx={cellStyle}>
-                                        <TextField variant="standard" placeholder="Add remarks" fullWidth InputProps={{ disableUnderline: true }} />
-                                    </TableCell>
+                                {points.map((point, index) => (
+                                    <TableRow key={index}>
+                                        <TableCell sx={{ ...cellStyle, textAlign: "center" }}>{index + 1}</TableCell>
+                                        <TableCell sx={{ ...cellStyle, fontWeight: "normal", maxWidth: "300px" }}>
+                                            <TextField
+                                                variant="standard"
+                                                placeholder="Enter discussion topic"
+                                                multiline
+                                                fullWidth
+                                                minRows={1}
+                                                maxRows={4}
+                                                value={point.point_name}
+                                                InputProps={{
+                                                    disableUnderline: true,
+                                                    sx: { fontSize: '14px', fontWeight: 'bold' }
+                                                }}
+                                                onChange={(e) => handleChange(index, 'point_name', e.target.value)}
+                                            />
+                                        </TableCell>
+                                        <TableCell sx={cellStyle}>
+                                            <TextField
+                                                variant="standard"
+                                                placeholder="Add remarks"
+                                                fullWidth
+                                                value={point.remarks}
+                                                onChange={(e) => handleChange(index, 'remarks', e.target.value)}
+                                                InputProps={{ disableUnderline: true }}
+                                            />
+                                        </TableCell>
 
-                                    <TableCell sx={{ ...cellStyle, textAlign: "center" }}>
-                                        <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2 }}>
-                                            {status !== "Not Agree" && status !== "Forward" && (
+                                        <TableCell sx={{ ...cellStyle, textAlign: "center" }}>
+                                            <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 1 }}>
                                                 <Button
-                                                    variant="outlined"
+                                                    variant={point.approved_by_admin === "APPROVED" ? "contained" : "outlined"}
                                                     sx={{
-                                                        width: '100px',
-                                                        color: "green",
+                                                        color: point.approved_by_admin === "APPROVED" ? "white" : "green",
                                                         borderColor: "green",
-                                                        backgroundColor: "#e6f8e6",
+                                                        backgroundColor: point.approved_by_admin === "APPROVED" ? "green" : "#e6f8e6",
                                                         textTransform: "none",
                                                         borderRadius: "14px",
+                                                        padding: "6px 40px",
                                                         fontSize: '10px',
                                                         gap: 0.5,
                                                         "&:hover": {
-                                                            backgroundColor: "#d4edda",
+                                                            backgroundColor: point.approved_by_admin === "APPROVED" ? "darkgreen" : "#d4edda",
                                                         },
                                                     }}
-                                                    onClick={() => handleForwardClick("agree")}
-                                                >
-                                                    Agree
-                                                </Button>
-                                            )}
-                                            {status !== "Not Agree" && status !== "Agree" && (
-                                                <Button
-                                                    variant="outlined"
-                                                    sx={{
-                                                        width: '100px',
-                                                        color: "black",
-                                                        borderColor: "black",
-                                                        backgroundColor: "#D8DEE2",
-                                                        textTransform: "none",
-                                                        borderRadius: "14px",
-                                                        fontSize: '10px',
-                                                        gap: 0.5,
+                                                    onClick={() => {
+                                                        approvePoint(point.point_id, "APPROVED");
+                                                        handleStatusChange(index, "Approve")
                                                     }}
-                                                    onClick={() => handleForwardClick("forward")}
                                                 >
-                                                    Forward
+                                                    Approve
                                                 </Button>
-                                            )}
-                                            {status !== "Agree" && status !== "Forward" && (
                                                 <Button
-                                                    variant="outlined"
+                                                    variant={point.approved_by_admin === "NOT APPROVED" ? "contained" : "outlined"}
                                                     sx={{
-                                                        width: '100px',
-                                                        color: "red",
+                                                        color: point.approved_by_admin === "NOT APPROVED" ? "white" : "red",
                                                         borderColor: "red",
-                                                        backgroundColor: "#fdecec",
+                                                        backgroundColor: point.approved_by_admin === "NOT APPROVED" ? "red" : "#fdecec",
                                                         textTransform: "none",
                                                         borderRadius: "14px",
+                                                        padding: "6px 30px",
                                                         fontSize: '10px',
                                                         gap: 0.5,
                                                         "&:hover": {
-                                                            backgroundColor: "#f8d7da",
+                                                            backgroundColor: point.approved_by_admin === "NOT APPROVED" ? "darkred" : "#f8d7da",
                                                         },
                                                     }}
-                                                    onClick={() => handleForwardClick("notAgree")}
+                                                    onClick={() => {
+                                                        approvePoint(point.point_id, "NOT APPROVED");
+                                                        handleStatusChange(index, "NotApprove")
+                                                    }}
                                                 >
-                                                    Not Agree
+                                                    Not Approve
                                                 </Button>
-                                            )}
-                                        </Box>
-                                    </TableCell>
+                                            </Box>
+                                        </TableCell>
 
-                                    <TableCell sx={cellStyle}>
-                                        <TextField variant="standard" placeholder="Select Member" fullWidth InputProps={{ disableUnderline: true }} />
-                                    </TableCell>
-                                    <TableCell sx={cellStyle}>
-                                        <TextField variant="standard" placeholder="Select Date" fullWidth
-                                            InputProps={{ disableUnderline: true }}
-                                            readOnly
-                                        />
-                                    </TableCell>
-                                </TableRow>
+                                        <TableCell sx={cellStyle}>
+                                            <TextField
+                                                variant="standard"
+                                                placeholder="Select Member"
+                                                fullWidth
+                                                value={point.responsible}
+                                                onChange={(e) => handleChange(index, 'responsible', e.target.value)}
+                                                InputProps={{ disableUnderline: true }}
+                                            />
+                                        </TableCell>
+                                        <TableCell sx={cellStyle}>
+                                            <TextField
+                                                variant="standard"
+                                                placeholder="Select Date"
+                                                fullWidth
+                                                value={point.point_deadline}
+                                                onChange={(e) => handleChange(index, 'point_deadline', e.target.value)}
+                                                InputProps={{ disableUnderline: true }}
+                                            />
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
                             </TableBody>
                         </Table>
                     </TableContainer>
@@ -508,7 +529,7 @@ export default function StartMeet({ handleBack }) {
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {meetingData.points.map((point, index) => (
+                                {points.map((point, index) => (
                                     <TableRow key={index}>
                                         <TableCell sx={cellStyle}>{index + 1}</TableCell>
                                         <TableCell sx={{ ...cellStyle, fontWeight: "normal" }}>
@@ -524,7 +545,7 @@ export default function StartMeet({ handleBack }) {
                                                     disableUnderline: true,
                                                     sx: { fontSize: '14px', fontWeight: 'bold' }
                                                 }}
-                                                onChange={(e) => handleChange(index, 'pointsToDiscuss', e.target.value)}
+                                                onChange={(e) => handleChange(index, 'point_name', e.target.value)}
                                             />
                                         </TableCell>
                                         <TableCell sx={cellStyle}>
@@ -533,52 +554,56 @@ export default function StartMeet({ handleBack }) {
                                                 placeholder="Add remarks"
                                                 fullWidth
                                                 InputProps={{ disableUnderline: true }}
-                                                value={point.todo}
-                                                onChange={(e) => handleChange(index, 'remarks', e.target.value)}
+                                                value={point.todo || point.old_todo || ''}
+                                                onChange={(e) => handleChange(index, 'todo', e.target.value)}
                                             />
                                         </TableCell>
                                         <TableCell sx={cellStyle}>
                                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                                                {/* Only show Approve button if current status is not "Not Approve" */}
-                                                {point.status !== "Not Approve" && (
-                                                    <Button
-                                                        variant="outlined"
-                                                        sx={{
-                                                            color: "green",
-                                                            borderColor: "green",
-                                                            backgroundColor: "#e6f8e6",
-                                                            textTransform: "none",
-                                                            borderRadius: "14px",
-                                                            padding: "6px 40px",
-                                                            fontSize: '10px',
-                                                            gap: 0.5,
-                                                            "&:hover": { backgroundColor: "#d4edda" },
-                                                        }}
-                                                        onClick={() => handleStatusChange(index, "Approve")}
-                                                    >
-                                                        Approve
-                                                    </Button>
-                                                )}
-                                                {/* Only show Not Approve button if current status is not "Approve" */}
-                                                {point.status !== "Approve" && (
-                                                    <Button
-                                                        variant="outlined"
-                                                        sx={{
-                                                            color: "red",
-                                                            borderColor: "red",
-                                                            backgroundColor: "#fdecec",
-                                                            textTransform: "none",
-                                                            borderRadius: "14px",
-                                                            padding: "6px 30px",
-                                                            fontSize: '10px',
-                                                            gap: 0.5,
-                                                            "&:hover": { backgroundColor: "#f8d7da" },
-                                                        }}
-                                                        onClick={() => handleStatusChange(index, "Not Approve")}
-                                                    >
-                                                        Not Approve
-                                                    </Button>
-                                                )}
+                                                <Button
+                                                    variant={point.status === "Approve" ? "contained" : "outlined"}
+                                                    sx={{
+                                                        color: point.status === "Approve" ? "white" : "green",
+                                                        borderColor: "green",
+                                                        backgroundColor: point.status === "Approve" ? "green" : "#e6f8e6",
+                                                        textTransform: "none",
+                                                        borderRadius: "14px",
+                                                        padding: "6px 40px",
+                                                        fontSize: '10px',
+                                                        gap: 0.5,
+                                                        "&:hover": {
+                                                            backgroundColor: point.status === "Approve" ? "darkgreen" : "#d4edda"
+                                                        },
+                                                    }}
+                                                    onClick={() => {
+                                                        approvePoint(point.point_id, "APPROVED");
+                                                        handleStatusChange(index, "Approve")
+                                                    }}
+                                                >
+                                                    Approve
+                                                </Button>
+                                                <Button
+                                                    variant={point.status === "Not Approve" ? "contained" : "outlined"}
+                                                    sx={{
+                                                        color: point.status === "Not Approve" ? "white" : "red",
+                                                        borderColor: "red",
+                                                        backgroundColor: point.status === "Not Approve" ? "red" : "#fdecec",
+                                                        textTransform: "none",
+                                                        borderRadius: "14px",
+                                                        padding: "6px 30px",
+                                                        fontSize: '10px',
+                                                        gap: 0.5,
+                                                        "&:hover": {
+                                                            backgroundColor: point.status === "Not Approve" ? "darkred" : "#f8d7da"
+                                                        },
+                                                    }}
+                                                    onClick={() => {
+                                                        approvePoint(point.point_id, "NOT APPROVED");
+                                                        handleStatusChange(index, "Not Approve")
+                                                    }}
+                                                >
+                                                    Not Approve
+                                                </Button>
                                             </Box>
                                         </TableCell>
                                         <TableCell sx={cellStyle}>
@@ -588,7 +613,7 @@ export default function StartMeet({ handleBack }) {
                                                 fullWidth
                                                 InputProps={{ disableUnderline: true }}
                                                 value={point.responsible}
-                                                onChange={(e) => handleChange(index, 'responsibility', e.target.value)}
+                                                onChange={(e) => handleChange(index, 'responsible', e.target.value)}
                                             />
                                         </TableCell>
                                         <TableCell sx={cellStyle}>
@@ -598,7 +623,7 @@ export default function StartMeet({ handleBack }) {
                                                 fullWidth
                                                 InputProps={{ disableUnderline: true }}
                                                 value={point.point_deadline}
-                                                onChange={(e) => handleChange(index, 'deadline', e.target.value)}
+                                                onChange={(e) => handleChange(index, 'point_deadline', e.target.value)}
                                             />
                                         </TableCell>
                                     </TableRow>
@@ -607,6 +632,8 @@ export default function StartMeet({ handleBack }) {
                         </Table>
                     </TableContainer>
                 )}
+
+                {/* Forwarding Form Modal */}
                 {isForward && (
                     <Box
                         sx={{
@@ -621,10 +648,10 @@ export default function StartMeet({ handleBack }) {
                             alignItems: "center",
                             zIndex: 5,
                         }}
-                        onClick={() => setIsForward(false)} // Close the form when clicking outside
+                        onClick={() => setIsForward(false)}
                     >
                         <Box onClick={(e) => e.stopPropagation()}>
-                            <ForwardingForm onClose={() => setIsForward(false)} selectedAction={selectedAction} /> // Pass onClose and selectedAction props
+                            <ForwardingForm onClose={() => setIsForward(false)} selectedAction={selectedAction} />
                         </Box>
                     </Box>
                 )}
@@ -632,23 +659,3 @@ export default function StartMeet({ handleBack }) {
         </Box>
     );
 }
-
-
-const cellStyle = {
-    border: "1px solid #ddd",
-    padding: "10px",
-    fontWeight: "bold",
-};
-
-const headerStyle = {
-    ...cellStyle,
-    backgroundColor: "#f0f0f0",
-    fontWeight: "bold",
-};
-
-const headerCellStyle = {
-    border: "1px solid #ddd",
-    padding: "10px",
-    backgroundColor: "#f0f0f0",
-    fontWeight: "bold",
-};

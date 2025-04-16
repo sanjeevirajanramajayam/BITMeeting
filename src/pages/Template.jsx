@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { FiArrowLeft, FiCheckCircle, FiTrash2 } from 'react-icons/fi';
 import { MdDragIndicator } from 'react-icons/md';
 import { useNavigate } from 'react-router-dom';
-import { Box, Typography, Button, Table, TableBody, TableCell, TableContainer, TableRow, TextField, Select, MenuItem, Chip ,IconButton } from '@mui/material';
+import { Box, Typography, Button, Table, TableBody, TableCell, TableContainer, TableRow, TextField, Select, MenuItem, Chip, IconButton } from '@mui/material';
 import Autocomplete from '@mui/material/Autocomplete';
 import bheader from "../assets/bannariammanheader.png";
 import '../styles/Template.css';
@@ -65,9 +65,24 @@ export default function Template() {
   useEffect(() => {
     const fetchMembers = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/templates/users');
+        const token = localStorage.getItem('token');
+        if (!token) {
+          console.error('No authentication token found');
+          return;
+        }
+
+        const response = await fetch('http://localhost:5000/api/templates/users', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
         const data = await response.json();
-        setAllMembers(data);
+
+        // Get current user's ID from token
+        const currentUserId = JSON.parse(atob(token.split('.')[1])).userId;
+        // Filter out the current user from the members list
+        const filteredMembers = data.filter(member => member.id !== currentUserId);
+        setAllMembers(filteredMembers);
       } catch (error) {
         console.error('Failed to fetch members:', error);
       }
@@ -283,7 +298,7 @@ export default function Template() {
 
   const handleDrop = (index, type) => {
     if (!dragItem || dragItem.type !== type) return;
-    
+
     if (type === 'role') {
       const items = [...roles];
       const draggedItem = items[dragItem.index];
@@ -571,14 +586,14 @@ export default function Template() {
   useEffect(() => {
     // Check if there's edit data in localStorage
     const storedEditData = localStorage.getItem('editTemplateData');
-    
+
     if (storedEditData) {
       try {
         const parsedData = JSON.parse(storedEditData);
         console.log('Parsed edit data from localStorage:', parsedData);
         setEditData(parsedData);
         setIsEditMode(true);
-        
+
         // Set initial meeting details from stored data
         setMeetingDetails(prev => ({
           ...prev,
@@ -593,12 +608,12 @@ export default function Template() {
         if (parsedData.repeatType) {
           setRepeatValue(parsedData.repeatType);
         }
-        
+
         // Load the full template details including points and roles from API
         if (parsedData.backendId) {
           fetchTemplateDetails(parsedData.backendId);
         }
-        
+
       } catch (error) {
         console.error('Error parsing edit template data:', error);
       }
@@ -612,7 +627,7 @@ export default function Template() {
         }));
       }
     }
-    
+
     // Clean up function to remove the edit data when component unmounts
     return () => {
       localStorage.removeItem('editTemplateData');
@@ -625,9 +640,9 @@ export default function Template() {
       console.error('No backend ID provided for template details');
       return;
     }
-    
+
     console.log(`Fetching template details for ID: ${backendId}`);
-    
+
     try {
       const token = localStorage.getItem('token');
       if (!token) {
@@ -659,10 +674,10 @@ export default function Template() {
           points: template.points,
           roles: template.roles
         });
-        
+
         // Log current meeting details before update
         console.log('Current meeting details before update:', meetingDetails);
-        
+
         // Update meeting details with all fields from the API response
         setMeetingDetails(prev => {
           const updates = {
@@ -674,7 +689,7 @@ export default function Template() {
             categoryId: template.category_id || prev.categoryId,
             venue: template.venue_id || prev.venue
           };
-          
+
           console.log('Updating meeting details with:', updates);
           return { ...prev, ...updates };
         });
@@ -686,7 +701,7 @@ export default function Template() {
         } else {
           console.log('No repeat_type found in response');
         }
-        
+
         // Set points from the API response
         if (template.points && Array.isArray(template.points)) {
           console.log(`Setting ${template.points.length} points from API:`, template.points);
@@ -713,7 +728,7 @@ export default function Template() {
                   role: member.role
                 };
               }
-              
+
               // Otherwise, try to find the member in our local array by ID
               const localMember = allMembers.find(m => m.id === member);
               return localMember || { id: member, name: `Unknown (${member})`, role: role.role };
@@ -724,7 +739,7 @@ export default function Template() {
               members: memberObjects
             };
           });
-          
+
           if (formattedRoles.length > 0) {
             setRoles(formattedRoles);
           }
@@ -779,7 +794,7 @@ export default function Template() {
 
       // Get the token from localStorage
       const token = localStorage.getItem('token');
-      
+
       if (!token) {
         alert('You must be logged in to create a template');
         navigate('/login');
@@ -787,14 +802,14 @@ export default function Template() {
       }
 
       let response;
-      
+
       if (isEditMode && editData && editData.backendId) {
         // If editing, update the template using the backend ID
         const updateUrl = `http://localhost:5000/api/templates/update/${editData.backendId}`;
         console.log(`Updating template with backend ID: ${editData.backendId}`);
         console.log(`Making PUT request to: ${updateUrl}`);
         console.log('Update payload:', JSON.stringify(templateData, null, 2));
-        
+
         try {
           response = await axios.put(updateUrl, templateData, {
             headers: {
@@ -805,11 +820,11 @@ export default function Template() {
           console.log('Template updated successfully:', response.data);
         } catch (updateError) {
           console.error('Update request failed:', updateError);
-          
+
           if (updateError.response) {
             console.error('Error response status:', updateError.response.status);
             console.error('Error response data:', updateError.response.data);
-            
+
             if (updateError.response.status === 500) {
               // Try a more aggressive fix: simplify the data structure
               const simpleTemplateData = {
@@ -827,9 +842,9 @@ export default function Template() {
                 })).slice(0, 1), // Just keep first role to test
                 status: 'Active'
               };
-              
+
               console.log('Trying again with simplified data:', simpleTemplateData);
-              
+
               // Try again with simplified data
               response = await axios.put(updateUrl, simpleTemplateData, {
                 headers: {
@@ -856,10 +871,10 @@ export default function Template() {
         });
         console.log('Template created:', response.data);
       }
-      
+
       // Show success notification
       setShowSuccess(true);
-      
+
       // Navigate to database page after 2 seconds
       setTimeout(() => {
         setShowSuccess(false);
@@ -867,7 +882,7 @@ export default function Template() {
       }, 2000);
     } catch (error) {
       console.error(`Error ${isEditMode ? 'updating' : 'creating'} template:`, error);
-      
+
       // Check if it's an authentication error
       if (error.response && error.response.status === 403) {
         alert('Authentication failed. Please log in again.');
@@ -1084,13 +1099,13 @@ export default function Template() {
     const newRoles = [...roles];
     const roleMembers = newRoles[roleIndex].members;
     const memberIndex = roleMembers.findIndex(m => m.id === member.id);
-    
+
     if (memberIndex === -1) {
       roleMembers.push(member);
     } else {
       roleMembers.splice(memberIndex, 1);
     }
-    
+
     setRoles(newRoles);
   };
 
@@ -1183,7 +1198,7 @@ export default function Template() {
       filtered = filtered.filter(m => m.department === activeDepartment);
     }
     if (searchTerm) {
-      filtered = filtered.filter(m => 
+      filtered = filtered.filter(m =>
         m.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         m.role.toLowerCase().includes(searchTerm.toLowerCase())
       );
@@ -1296,7 +1311,7 @@ export default function Template() {
     headerCell: headerCellStyle,
     disabledHeader: disabledHeaderStyle,
     disabledCell: disabledCellStyle,
-    
+
     // Member selection styles
     memberSelection: {
       chip: {
@@ -1349,7 +1364,7 @@ export default function Template() {
           options={allMembers}
           getOptionLabel={(option) => `${option.name} | ${option.role}`}
           isOptionEqualToValue={(option, value) => option.id === value.id}
-          getOptionDisabled={(option) => 
+          getOptionDisabled={(option) =>
             roles.some((r, i) => i !== index && r.members.some(m => m.id === option.id))
           }
           renderInput={(params) => (
@@ -1375,7 +1390,7 @@ export default function Template() {
               {...props}
               style={{
                 ...props.style,
-                opacity: roles.some((r, i) => 
+                opacity: roles.some((r, i) =>
                   i !== index && r.members.some(m => m.id === option.id)
                 ) ? 0.5 : 1,
                 backgroundColor: selected ? '#e8f4ff' : 'transparent',
@@ -1391,7 +1406,7 @@ export default function Template() {
           )}
           filterOptions={(options, { inputValue }) => {
             const searchTerm = inputValue.toLowerCase();
-            return options.filter(option => 
+            return options.filter(option =>
               option.name.toLowerCase().includes(searchTerm) ||
               option.role.toLowerCase().includes(searchTerm) ||
               option.department.toLowerCase().includes(searchTerm)
@@ -1402,11 +1417,11 @@ export default function Template() {
 
         {!isPreview && (
           <Box sx={{ display: 'flex', gap: 1 }}>
-            <Box component="span" sx={{...actionButtonStyle, cursor: 'grab'}}>
+            <Box component="span" sx={{ ...actionButtonStyle, cursor: 'grab' }}>
               <MdDragIndicator size={18} />
             </Box>
-            <Box 
-              component="span" 
+            <Box
+              component="span"
               sx={{
                 ...actionButtonStyle,
                 '&:hover': {
@@ -1423,7 +1438,7 @@ export default function Template() {
       </Box>
     </TableCell>
   );
-  
+
 
   return (
     <div className="cm-container"> {/* Change from page-container to cm-container */}
@@ -1463,18 +1478,18 @@ export default function Template() {
             <TableBody>
               {/* Meeting Details Row */}
               <TableRow>
-                <TableCell sx={{...headerCellStyle, width: '12%'}}>Name of the Meeting</TableCell>
-                <TableCell sx={{...cellStyle, width: '38%'}}>
+                <TableCell sx={{ ...headerCellStyle, width: '12%' }}>Name of the Meeting</TableCell>
+                <TableCell sx={{ ...cellStyle, width: '38%' }}>
                   {isPreview ? (
                     <Typography sx={{ padding: '8px 0', color: '#374151' }}>
                       {meetingDetails.title || 'Not specified'}
                     </Typography>
                   ) : (
-                    <TextField 
-                      variant="standard" 
+                    <TextField
+                      variant="standard"
                       placeholder="Enter title"
                       fullWidth
-                      InputProps={{ 
+                      InputProps={{
                         disableUnderline: true,
                         style: inputStyle
                       }}
@@ -1483,8 +1498,8 @@ export default function Template() {
                     />
                   )}
                 </TableCell>
-                <TableCell sx={{...disabledHeaderStyle, width: '12%'}}>Reference Number</TableCell>
-                <TableCell sx={{...disabledCellStyle, width: '38%'}}>
+                <TableCell sx={{ ...disabledHeaderStyle, width: '12%' }}>Reference Number</TableCell>
+                <TableCell sx={{ ...disabledCellStyle, width: '38%' }}>
                   Auto generate
                 </TableCell>
               </TableRow>
@@ -1505,7 +1520,7 @@ export default function Template() {
                       minRows={2}
                       maxRows={8}
                       placeholder="Enter Description min 100 words"
-                      InputProps={{ 
+                      InputProps={{
                         disableUnderline: true,
                         style: inputStyle
                       }}
@@ -1519,84 +1534,84 @@ export default function Template() {
               {/* Repeat and Priority Row */}
               <TableRow>
 
-                  <TableCell sx={cellStyle}>Repeat Type</TableCell>
-                  <TableCell sx={{ position: "relative", ...cellStyle }}>
-                    {repeatValue ? (
-                      <Box
-                        sx={{ 
-                          display: "flex", 
-                          alignItems: "center", 
-                          borderRadius: "20px",
-                          bgcolor: "#f0f8ff", 
-                          padding: "6px 12px",
-                          width: "fit-content",
-                          minWidth: "10px" 
+                <TableCell sx={cellStyle}>Repeat Type</TableCell>
+                <TableCell sx={{ position: "relative", ...cellStyle }}>
+                  {repeatValue ? (
+                    <Box
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        borderRadius: "20px",
+                        bgcolor: "#f0f8ff",
+                        padding: "6px 12px",
+                        width: "fit-content",
+                        minWidth: "10px"
+                      }}
+                    >
+                      <Typography sx={{ color: "#175CD3", fontSize: "12px" }}>
+                        {repeatValue}
+                      </Typography>
+                      <IconButton
+                        sx={{
+                          border: "2px solid #FB3748",
+                          borderRadius: "50%",
+                          p: "2px",
+                          marginLeft: "5px",
+                          "&:hover": { backgroundColor: "transparent" }
                         }}
-                      >
-                        <Typography sx={{ color: "#175CD3", fontSize: "12px" }}>
-                          {repeatValue}
-                        </Typography>
-                        <IconButton
-                          sx={{ 
-                            border: "2px solid #FB3748", 
-                            borderRadius: "50%", 
-                            p: "2px",
-                            marginLeft: "5px", 
-                            "&:hover": { backgroundColor: "transparent" } 
-                          }}
-                          onClick={() => setRepeatValue("")}
-                          disabled={isPreview}
-                        >
-                          <CloseIcon sx={{ fontSize: "8px", color: "#FB3748" }} />
-                        </IconButton>
-                      </Box>
-                    ) : (
-                      <TextField
-                        placeholder="Ex..Monthly"
-                        variant="standard"
-                        InputProps={{ disableUnderline: true }}
-                        value={repeatValue}
-                        onClick={() => setOpenRepeat(true)}
+                        onClick={() => setRepeatValue("")}
                         disabled={isPreview}
-                      />
-                    )}
+                      >
+                        <CloseIcon sx={{ fontSize: "8px", color: "#FB3748" }} />
+                      </IconButton>
+                    </Box>
+                  ) : (
+                    <TextField
+                      placeholder="Ex..Monthly"
+                      variant="standard"
+                      InputProps={{ disableUnderline: true }}
+                      value={repeatValue}
+                      onClick={() => setOpenRepeat(true)}
+                      disabled={isPreview}
+                    />
+                  )}
 
-                    {openRepeat && (
+                  {openRepeat && (
+                    <Box
+                      sx={{
+                        position: "fixed",
+                        top: 0,
+                        left: 0,
+                        width: "100vw",
+                        height: "100vh",
+                        backgroundColor: "rgba(0, 0, 0, 0.5)",
+                        display: "flex",
+                        justifyContent: "center",
+                        alignItems: "center",
+                        zIndex: 5,
+                      }}
+                      onClick={() => setOpenRepeat(false)}
+                    >
                       <Box
                         sx={{
-                          position: "fixed",
-                          top: 0,
-                          left: 0,
-                          width: "100vw",
-                          height: "100vh",
-                          backgroundColor: "rgba(0, 0, 0, 0.5)",
-                          display: "flex",
-                          justifyContent: "center",
-                          alignItems: "center",
-                          zIndex: 5,
+                          backgroundColor: "white",
+                          padding: "16px",
+                          borderRadius: "8px",
+                          position: "relative",
                         }}
-                        onClick={() => setOpenRepeat(false)}
+                        onClick={(e) => e.stopPropagation()}
                       >
-                        <Box
-                          sx={{
-                            backgroundColor: "white",
-                            padding: "16px",
-                            borderRadius: "8px",
-                            position: "relative",
+                        <RepeatOverlay
+                          onClose={() => setOpenRepeat(false)}
+                          onSave={(selectedOption) => {
+                            setRepeatValue(selectedOption);
+                            setOpenRepeat(false);
                           }}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <RepeatOverlay
-                            onClose={() => setOpenRepeat(false)}
-                            onSave={(selectedOption) => {
-                              setRepeatValue(selectedOption);
-                              setOpenRepeat(false);
-                            }}
-                          />
-                        </Box>
+                        />
                       </Box>
-                    )}
-                  </TableCell>
+                    </Box>
+                  )}
+                </TableCell>
 
 
                 <TableCell sx={headerCellStyle}>Priority Type</TableCell>
@@ -1648,7 +1663,7 @@ export default function Template() {
 
               {/* Roles Row */}
               {roles.map((role, index) => (
-                <TableRow 
+                <TableRow
                   key={index}
                   draggable={!isPreview}
                   onDragStart={!isPreview ? () => handleRoleDragStart(index) : undefined}
@@ -1660,7 +1675,7 @@ export default function Template() {
                     }
                   }}
                 >
-                  <TableCell sx={{...cellStyle, width: '20%'}}>
+                  <TableCell sx={{ ...cellStyle, width: '20%' }}>
                     <Box sx={rowContentStyle}>
                       <span style={{ color: '#64748b', minWidth: '24px' }}>
                         {getAlphabeticalIndex(index)}
@@ -1670,11 +1685,11 @@ export default function Template() {
                           {role.role || 'Not specified'}
                         </Typography>
                       ) : (
-                        <TextField 
-                          variant="standard" 
+                        <TextField
+                          variant="standard"
                           placeholder="Enter title"
                           fullWidth
-                          InputProps={{ 
+                          InputProps={{
                             disableUnderline: true,
                             style: inputStyle
                           }}
@@ -1691,7 +1706,7 @@ export default function Template() {
               {!isPreview && (
                 <TableRow>
                   <TableCell colSpan={4} sx={{ border: 0, padding: 0 }}>
-                    <Button 
+                    <Button
                       fullWidth
                       sx={blueButtonStyle}
                       onClick={addNewRole}
@@ -1711,7 +1726,7 @@ export default function Template() {
 
               {/* Points Rows with auto-height */}
               {points.map((point, index) => (
-                <TableRow 
+                <TableRow
                   key={index}
                   draggable={!isPreview}
                   onDragStart={!isPreview ? () => handlePointDragStart(index) : undefined}
@@ -1723,7 +1738,7 @@ export default function Template() {
                     }
                   }}
                 >
-                  <TableCell sx={{...cellStyle, width: '80px', textAlign: 'center', borderRight: '1px solid #e2e8f0'}}>
+                  <TableCell sx={{ ...cellStyle, width: '80px', textAlign: 'center', borderRight: '1px solid #e2e8f0' }}>
                     {point.sno}
                   </TableCell>
                   <TableCell colSpan={3} sx={cellStyle}>
@@ -1740,7 +1755,7 @@ export default function Template() {
                           minRows={1}
                           maxRows={5}
                           placeholder="Enter points"
-                          InputProps={{ 
+                          InputProps={{
                             disableUnderline: true,
                             style: inputStyle
                           }}
@@ -1750,11 +1765,11 @@ export default function Template() {
                       )}
                       {!isPreview && (
                         <Box className="actions" sx={actionsWrapperStyle}>
-                          <Box component="span" sx={{...actionButtonStyle, cursor: 'grab'}}>
+                          <Box component="span" sx={{ ...actionButtonStyle, cursor: 'grab' }}>
                             <MdDragIndicator size={18} />
                           </Box>
-                          <Box 
-                            component="span" 
+                          <Box
+                            component="span"
                             sx={{
                               ...actionButtonStyle,
                               '&:hover': {
@@ -1777,7 +1792,7 @@ export default function Template() {
               {!isPreview && (
                 <TableRow>
                   <TableCell colSpan={4} sx={{ border: 0, padding: 0 }}>
-                    <Button 
+                    <Button
                       fullWidth
                       sx={blueButtonStyle}
                       onClick={addNewPoint}

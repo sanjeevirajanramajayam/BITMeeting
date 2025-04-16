@@ -4,13 +4,17 @@ import Autocomplete from '@mui/material/Autocomplete';
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
-import { Cancel } from "@mui/icons-material";
 import CloseIcon from "@mui/icons-material/Close";
 import { CheckBox } from "@mui/icons-material";
 import { useLocation } from "react-router-dom";
 import AttendanceIcon from "@mui/icons-material/HowToReg";
 import AgendaIcon from "@mui/icons-material/Groups";
+import axios from "axios";
+import { Cancel } from "@mui/icons-material";
+import CancelIcon from '@mui/icons-material/Cancel';
+import CheckBoxIcon from '@mui/icons-material/CheckBox';
 
+// import { CheckBoxI } from "@mui/icons-material";
 import { FormatBold, FormatItalic, FormatUnderlined, FormatAlignLeft, FormatAlignCenter, FormatAlignRight, Link } from "@mui/icons-material";
 
 import image from "../assets/bannariammanheader.png";
@@ -108,8 +112,11 @@ export default function JoinMeet({ onBack }) {
     const [isAccpet, setIsAccept] = useState(false);
     const [onJoin, setOnJoin] = useState(false);
     const [selectedTab, setSelectedTab] = useState("attendance");
-    const [status, setStatus] = useState(null);
-    const [pointData, setpointData] = useState([]);
+    const [pointData, setPointData] = useState([]);
+
+    const location = useLocation();
+    const { meetingData } = location.state || {};
+    console.log(meetingData)
 
     const handleCancelMeeting = () => {
         setOpenRejectCard(true);
@@ -119,84 +126,169 @@ export default function JoinMeet({ onBack }) {
         setOpenRejectCard(false);
     };
 
+    const sendTodo = async (pointId, todo, status) => {
+        try {
+            const token = localStorage.getItem('token');
+            const sentobj = {
+                pointId,
+                todo,
+                status,
+                remarks: todo
+            };
 
+            const response = await axios.post(
+                'http://localhost:5000/api/meetings/set-todo',
+                sentobj,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                }
+            );
+
+            // Update the specific point in state
+            setPointData(prevData =>
+                prevData.map(point =>
+                    point.pointId === pointId
+                        ? { ...point, todo, point_status: status }
+                        : point
+                )
+            );
+
+        } catch (err) {
+            console.log(err);
+        }
+    };
+
+    const acceptMeeting = async (status) => {
+        try {
+            const meetingId = meetingData.id;
+            const token = localStorage.getItem('token');
+            const sentobj = { meetingId, status };
+
+            const response = await axios.post(
+                'http://localhost:5000/api/meetings/respond',
+                sentobj,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                }
+            );
+
+            setIsAccept(status === 'accept');
+        } catch (err) {
+            console.log(err);
+        }
+    };
+
+    const setMeetingState = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.post(
+                'http://localhost:5000/api/meetings/get-response',
+                { meetingId: meetingData.id },
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                }
+            );
+
+            if (response.data.accepted_status === 'accept') {
+                setIsAccept(true);
+            }
+        } catch (error) {
+            console.error("Error getting meeting state:", error);
+        }
+    };
 
     const fetchMeetings = async () => {
         try {
             const token = localStorage.getItem('token');
             const meetingId = meetingData.id;
-            console.log("Hello")
-            console.log("Token:", token);
-            console.log("Meeting ID:", meetingId);
-
-            const response = await fetch('http://localhost:5000/api/meetings/get-responsibility', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`
-                },
-                body: JSON.stringify({ meetingId })
-            });
-
+            const response = await fetch(
+                'http://localhost:5000/api/meetings/get-responsibility',
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({ meetingId }),
+                }
+            );
             const data = await response.json();
-            if (!data.data){
-                setpointData([]);
+
+            if (!data.data) {
+                setPointData([]);
+            } else {
+                setPointData(
+                    data.data.map(point => ({
+                        ...point,
+                        point_status: point.point_status || null,
+                        todo: point.todo || ''
+                    }))
+                );
             }
-            else {
-                setpointData(data.data)
-            }
-            console.log("Response data:", data);
-
-            //   if (data.success) {
-            //     const formattedMeetings = data.meetings.map(meeting => ({
-            //       id: meeting.id,
-            //       type: `Info: ${meeting.role}`,
-            //       title: meeting.meeting_name,
-            //       date: dayjs(meeting.start_time).format("dddd, D MMMM, YYYY"),
-            //       duration: dayjs(meeting.end_time).diff(dayjs(meeting.start_time), 'minute') + " min",
-            //       location: `Venue ID: ${meeting.venue_id}`,
-            //       description: meeting.meeting_description,
-            //       host: `${meeting.created_by}`,
-            //       priority: `${meeting.priority.toUpperCase()} PRIORITY`,
-            //       deadline: meeting.meeting_status === "not_started" ? "Upcoming" : null,
-            //       progress: meeting.meeting_status === "in_progress" ? "40%" : null,
-            //       repeat_type: meeting.repeat_type.toUpperCase(),
-            //       members: meeting.members
-            //     }));
-
-            //     setMeetings(formattedMeetings);
-            //   } else {
-            //     console.warn("Response returned success: false", data);
-            //   }
-
         } catch (error) {
             console.error("Failed to fetch meetings:", error);
         }
     };
 
-
     useEffect(() => {
-        fetchMeetings();
-    }, []);
+        if (meetingData) {
+            setMeetingState();
+            fetchMeetings();
+        }
+    }, [meetingData]);
 
-    const location = useLocation();
-    const { meetingData } = location.state || {};
-    console.log('helloeer', meetingData)
+    const handleTodoChange = (pointId, value) => {
+        setPointData(prevData =>
+            prevData.map(point =>
+                point.pointId === pointId
+                    ? { ...point, todo: value }
+                    : point
+            )
+        );
+    };
 
-    console.log('sfs', (Object.entries(meetingData.members)));
+    console.log(pointData)
 
     return (
-        <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "90vh" }}>
-            <Box sx={{ display: "flex", flexDirection: "column", minHeight: "90vh", backgroundColor: "#f5f5f5", padding: "16px", borderRadius: "8px", boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.1)" }}>
-                <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", gap: 80 }}>
+        <Box sx={{
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            minHeight: "90vh"
+        }}>
+            <Box sx={{
+                display: "flex",
+                flexDirection: "column",
+                minHeight: "90vh",
+                backgroundColor: "#f5f5f5",
+                padding: "16px",
+                borderRadius: "8px",
+                boxShadow: "0px 2px 4px rgba(0,0,0,0.1)",
+                width: '100%',
+                maxWidth: '1200px'
+            }}>
+                {/* Header Section */}
+                <Box sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "12px 0",
+                    gap: 2
+                }}>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                         <Box sx={{ display: "flex", padding: "5px", backgroundColor: "white" }}>
                             <ArrowBackIcon sx={{ cursor: "pointer" }} onClick={onBack} />
                         </Box>
                         <Typography variant="h6" fontWeight="bold">
-                            {meetingData.title}
+                            {meetingData?.title}
                             <Typography sx={{ fontSize: '12px' }}>
-                                SF Board Room 12 Nov,2021 at 9:40 PM
+                                {meetingData?.date || 'No date specified'}
                             </Typography>
                         </Typography>
                     </Box>
@@ -206,7 +298,9 @@ export default function JoinMeet({ onBack }) {
                             <Button
                                 variant="contained"
                                 sx={{
-                                    backgroundColor: "#6c757d", textTransform: "none", gap: "5px",
+                                    backgroundColor: "#6c757d",
+                                    textTransform: "none",
+                                    gap: "5px",
                                     "&:hover": { backgroundColor: "#5a6268" },
                                 }}
                             >
@@ -233,6 +327,7 @@ export default function JoinMeet({ onBack }) {
                             <Button
                                 variant="contained"
                                 sx={{ width: '100%', backgroundColor: "#FC7A85", textTransform: "none", gap: "5px" }}
+                                onClick={() => setOnJoin(false)}
                             >
                                 <AutoAwesomeOutlinedIcon sx={{ fontSize: "18px" }} />
                                 Leave Meeting
@@ -240,9 +335,18 @@ export default function JoinMeet({ onBack }) {
                         </Box>
                     )}
                 </Box>
+
+                {/* Accept/Reject Section */}
                 {!onJoin && !isAccpet && (
-                    <Box sx={{ display: 'flex', padding: '8px', backgroundColor: 'white', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <Typography sx={{ fontSize: '15px' }}>Accepted To Join The Meeting</Typography>
+                    <Box sx={{
+                        display: 'flex',
+                        padding: '8px',
+                        backgroundColor: 'white',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        marginBottom: '16px'
+                    }}>
+                        <Typography sx={{ fontSize: '15px' }}>Accept to Join the Meeting</Typography>
                         <Box sx={{ display: "flex", alignItems: "center", gap: 1, padding: "6px", backgroundColor: "white", borderRadius: "8px" }}>
                             <Button
                                 variant="outlined"
@@ -255,13 +359,11 @@ export default function JoinMeet({ onBack }) {
                                     padding: "6px 40px",
                                     fontSize: '10px',
                                     gap: 0.5,
-                                    "&:hover": {
-                                        backgroundColor: "#f8d7da",
-                                    },
+                                    "&:hover": { backgroundColor: "#f8d7da" },
                                 }}
                                 onClick={handleCancelMeeting}
                             >
-                                <Cancel sx={{ color: "red", fontSize: '10px' }} />
+                                <CancelIcon sx={{ color: "red", fontSize: '10px' }} />
                                 Reject
                             </Button>
                             <Button
@@ -275,63 +377,97 @@ export default function JoinMeet({ onBack }) {
                                     padding: "6px 40px",
                                     fontSize: '10px',
                                     gap: 0.5,
-                                    "&:hover": {
-                                        backgroundColor: "#d4edda",
-                                    },
+                                    "&:hover": { backgroundColor: "#d4edda" },
                                 }}
-                                onClick={() => setIsAccept(true)}
+                                onClick={() => {
+                                    setIsAccept(true);
+                                    acceptMeeting('accept');
+                                }}
                             >
-                                <CheckBox sx={{ color: "green", fontSize: '10px' }} />
+                                <CheckBoxIcon sx={{ color: "green", fontSize: '10px' }} />
                                 Accept
                             </Button>
                         </Box>
                     </Box>
                 )}
+
+                {/* Reject Card Modal */}
                 {openRejectCard && (
-                    <Box sx={{ position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh", backgroundColor: "rgba(0, 0, 0, 0.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 999 }}>
-                        <Reject onClose={handleCloseRejectCard} />
-                    </Box>
-                )}
-                {onJoin && (
-                    <Box sx={{ display: "flex", borderRadius: 2, overflow: "hidden", padding: '6px', backgroundColor: 'white', gap: 2 }}>
-                        <Button
-                            onClick={() => setSelectedTab("attendance")}
-                            sx={{
-                                flex: 0.75,
-                                backgroundColor: selectedTab === "attendance" ? "#4285F4" : "transparent",
-                                color: selectedTab === "attendance" ? "#fff" : "#666",
-                                "&:hover": { backgroundColor: selectedTab === "attendance" ? "#357ae8" : "#f0f0f0" },
-                                textTransform: "none",
-                                gap: 2,
-                                transition: "background-color 0.3s, color 0.3s",
-                            }}
-                        >
-                            <AttendanceIcon />
-                            Attendance
-                        </Button>
-                        <Button
-                            onClick={() => setSelectedTab("agenda")}
-                            sx={{
-                                flex: 0.75,
-                                backgroundColor: selectedTab === "agenda" ? "#4285F4" : "transparent",
-                                color: selectedTab === "agenda" ? "#fff" : "#666",
-                                "&:hover": { backgroundColor: selectedTab === "agenda" ? "#357ae8" : "#f0f0f0" },
-                                textTransform: "none",
-                                gap: 2,
-                                transition: "background-color 0.3s, color 0.3s",
-                            }}
-                        >
-                            <AgendaIcon />
-                            Agenda
-                        </Button>
+                    <Box sx={{
+                        position: "fixed",
+                        top: 0,
+                        left: 0,
+                        width: "100vw",
+                        height: "100vh",
+                        backgroundColor: "rgba(0,0,0,0.5)",
+                        display: "flex",
+                        justifyContent: "center",
+                        alignItems: "center",
+                        zIndex: 999
+                    }}>
+                        <Box sx={{
+                            backgroundColor: 'white',
+                            padding: '20px',
+                            borderRadius: '8px',
+                            width: '400px'
+                        }}>
+                            <Typography variant="h6" gutterBottom>Reject Meeting</Typography>
+                            <Typography variant="body1" sx={{ marginBottom: '20px' }}>
+                                Are you sure you want to reject this meeting invitation?
+                            </Typography>
+                            <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                                <Button
+                                    variant="outlined"
+                                    onClick={handleCloseRejectCard}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    variant="contained"
+                                    color="error"
+                                    onClick={() => {
+                                        acceptMeeting('reject');
+                                        handleCloseRejectCard();
+                                    }}
+                                >
+                                    Reject
+                                </Button>
+                            </Box>
+                        </Box>
                     </Box>
                 )}
 
-                <Box sx={{ display: "flex", backgroundColor: "white", justifyContent: "center", alignItems: "center", flexDirection: 'column', marginTop: '10px' }}>
-                    <img src={image} alt="Example" style={{ width: "50%", height: "50%", padding: "10px" }} />
+                {/* Meeting Content */}
+                <Box sx={{
+                    display: "flex",
+                    backgroundColor: "white",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    flexDirection: 'column',
+                    marginTop: '10px',
+                    padding: '20px',
+                    borderRadius: '8px'
+                }}>
+                    <img
+                        src={image}
+                        alt="Meeting"
+                        style={{
+                            width: "50%",
+                            height: "auto",
+                            padding: "10px",
+                            marginBottom: '20px'
+                        }}
+                    />
 
-                    {/* first part */}
-                    <TableContainer sx={{ maxWidth: 1150, margin: "auto", mt: 3, border: "1px solid #ddd", borderBottom: 'none' }}>
+                    {/* Meeting Details Table */}
+                    <TableContainer sx={{
+                        width: '100%',
+                        margin: "auto",
+                        mt: 3,
+                        border: "1px solid #ddd",
+                        borderBottom: 'none',
+                        marginBottom: '20px'
+                    }}>
                         <Table sx={{ borderCollapse: "collapse" }}>
                             <TableBody>
                                 <TableRow>
@@ -339,9 +475,9 @@ export default function JoinMeet({ onBack }) {
                                     <TableCell sx={cellStyle}>
                                         <TextField
                                             variant="standard"
-                                            placeholder="Ex..8th BoS Meeting"
+                                            placeholder="Ex. 8th BoS Meeting"
                                             fullWidth
-                                            value={meetingData.title}
+                                            value={meetingData?.title || ''}
                                             InputProps={{ disableUnderline: true }}
                                         />
                                     </TableCell>
@@ -358,7 +494,6 @@ export default function JoinMeet({ onBack }) {
                                         />
                                     </TableCell>
                                 </TableRow>
-
                                 <TableRow>
                                     <TableCell sx={cellStyle}>Meeting Description</TableCell>
                                     <TableCell colSpan={3} sx={{ ...cellStyle }}>
@@ -366,9 +501,9 @@ export default function JoinMeet({ onBack }) {
                                             variant="standard"
                                             multiline
                                             fullWidth
-                                            placeholder="Ex..Lorem ipsum dolor sit amet consectetur. Arcu vel egestas rutrum in magna semper dolor sem. Bibendum tristique quisque facilisis cursus mus malesuada mattis et erat. Pellentesque sed congue tellus massa aliquam. Augue erat nunc mauris consectetur."
+                                            placeholder="Meeting description..."
                                             rows={4}
-                                            value={meetingData.description}
+                                            value={meetingData?.description || ''}
                                             InputProps={{
                                                 disableUnderline: true,
                                                 sx: { fontStyle: 'italic', color: '#555' }
@@ -376,30 +511,28 @@ export default function JoinMeet({ onBack }) {
                                         />
                                     </TableCell>
                                 </TableRow>
-
                                 <TableRow>
                                     <TableCell sx={cellStyle}>Repeat Type</TableCell>
                                     <TableCell sx={cellStyle}>
                                         <TextField
-                                            placeholder="Ex..Monthly"
-                                            value={meetingData.repeat_type}
+                                            placeholder="Ex. Monthly"
+                                            value={meetingData?.repeat_type || ''}
                                             variant="standard"
                                             InputProps={{ disableUnderline: true }}
                                         />
                                     </TableCell>
-
                                     <TableCell sx={cellStyle}>Priority Type</TableCell>
                                     <TableCell sx={cellStyle}>
                                         <Autocomplete
                                             disablePortal
                                             sx={{
-                                                "& .MuiAutocomplete-endAdornment": { display: "none" },
+                                                "&.MuiAutocomplete-endAdornment": { display: "none" },
                                             }}
-                                            value={meetingData.description}
+                                            value={meetingData?.priority || ''}
                                             renderInput={(params) => (
                                                 <TextField
                                                     {...params}
-                                                    placeholder="Ex..High Priority"
+                                                    placeholder="Ex. High Priority"
                                                     variant="standard"
                                                     InputProps={{
                                                         ...params.InputProps,
@@ -410,7 +543,6 @@ export default function JoinMeet({ onBack }) {
                                         />
                                     </TableCell>
                                 </TableRow>
-
                                 <TableRow>
                                     <TableCell sx={cellStyle}>Venue Details</TableCell>
                                     <TableCell sx={cellStyle}>
@@ -418,39 +550,37 @@ export default function JoinMeet({ onBack }) {
                                             variant="standard"
                                             placeholder="Select venue"
                                             fullWidth
+                                            value={meetingData.location || ''}
                                             InputProps={{
                                                 disableUnderline: true,
                                                 style: { color: "#999" }
                                             }}
                                         />
                                     </TableCell>
-
                                     <TableCell sx={cellStyle}>Date & Time</TableCell>
                                     <TableCell sx={cellStyle}>
                                         <TextField
                                             variant="standard"
                                             placeholder="Select time"
                                             fullWidth
+                                            value={meetingData.date}
                                             InputProps={{ disableUnderline: true }}
                                         />
                                     </TableCell>
                                 </TableRow>
-
                                 <TableRow sx={{ backgroundColor: "#f0f0f0" }}>
                                     <TableCell sx={headerStyle}>Roles</TableCell>
                                     <TableCell colSpan={3} sx={headerStyle}>Member list</TableCell>
                                 </TableRow>
-                                {Object.entries(meetingData.members).map((member => (
-                                    <TableRow>
+                                {meetingData?.members && Object.entries(meetingData.members).map(([role, members]) => (
+                                    <TableRow key={role}>
                                         <TableCell sx={cellStyle}>
                                             <TextField
                                                 variant="standard"
                                                 placeholder="Person"
-                                                value={member[0]}
+                                                value={role}
                                                 fullWidth
-                                                InputProps={{
-                                                    disableUnderline: true,
-                                                }}
+                                                InputProps={{ disableUnderline: true }}
                                             />
                                         </TableCell>
                                         <TableCell colSpan={3} sx={cellStyle}>
@@ -458,194 +588,251 @@ export default function JoinMeet({ onBack }) {
                                                 variant="standard"
                                                 placeholder="Select Member"
                                                 fullWidth
-                                                value={member[1].map((element) => ` ${element.name}`)}
-                                                InputProps={{
-                                                    disableUnderline: true,
-                                                }}
+                                                value={members.map(member => member.name).join(', ')}
+                                                InputProps={{ disableUnderline: true }}
                                             />
                                         </TableCell>
-                                    </TableRow>)))}
+                                    </TableRow>
+                                ))}
                             </TableBody>
                         </Table>
                     </TableContainer>
 
-                    {onJoin && selectedTab === 'attendance' ? (
-                        <TableContainer sx={{ maxWidth: 1150, margin: "auto", border: "1px solid #ddd", borderTop: "none" }}>
-                            <Table sx={{ borderCollapse: "collapse" }}>
-                                <TableHead>
-                                    <TableRow>
-                                        <TableCell width="5%" sx={{ ...headerCellStyle, textAlign: 'center' }}>S.No</TableCell>
-                                        <TableCell width="35%" sx={{ ...headerCellStyle, textAlign: 'center' }}>Name & Designation</TableCell>
-                                        <TableCell width="25%" sx={{ ...headerCellStyle, textAlign: 'center' }}>Role</TableCell>
-                                        <TableCell width="25%" sx={{ ...headerCellStyle, textAlign: 'center' }}>Attendance</TableCell>
-                                    </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                    {[...Array(4)].map((_, index) => (
-                                        <TableRow key={index}>
-                                            <TableCell sx={{ ...cellStyle, textAlign: "center" }}>hello</TableCell>
-                                            <TableCell sx={{ ...cellStyle, textAlign: "center" }}>hello</TableCell>
-                                            <TableCell sx={{ ...cellStyle, textAlign: "center" }}>hello</TableCell>
-                                            <TableCell sx={{ ...cellStyle, textAlign: "center" }}>
-                                                <Button
-                                                    variant="outlined"
-                                                    sx={{
-                                                        color: "green",
-                                                        borderColor: "green",
-                                                        backgroundColor: "#e6f8e6",
-                                                        textTransform: "none",
-                                                        borderRadius: "14px",
-                                                        padding: "6px 40px",
-                                                        fontSize: '10px',
-                                                        gap: 0.5,
-                                                        "&:hover": {
-                                                            backgroundColor: "#d4edda",
-                                                        },
-                                                    }}
-                                                >
-                                                    <CheckBox sx={{ color: "green", fontSize: '10px' }} />
-                                                    Present
-                                                </Button>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </TableContainer>
-                    ) : onJoin && selectedTab === 'agenda' ? (
-                        <TableContainer sx={{ maxWidth: 1150, margin: "auto", border: "1px solid #ddd", borderTop: "none" }}>
-                            <Table sx={{ borderCollapse: "collapse" }}>
-                                <TableHead>
-                                    <TableRow>
-                                        <TableCell width="5%" sx={{ ...headerCellStyle, textAlign: 'center' }}>S.No</TableCell>
-                                        <TableCell width="30%" sx={{ ...headerCellStyle, textAlign: 'center' }}>Points to be Discussed</TableCell>
-                                        <TableCell width="20%" sx={{ ...headerCellStyle, textAlign: 'center' }}>Remarks</TableCell>
-                                        <TableCell width="15%" sx={{ ...headerCellStyle, textAlign: 'center' }}>Status</TableCell>
-                                        <TableCell width="15%" sx={{ ...headerCellStyle, textAlign: 'center' }}>Responsibility</TableCell>
-                                        <TableCell width="15%" sx={{ ...headerCellStyle, textAlign: 'center' }}>Deadline</TableCell>
-                                    </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                    <TableRow>
-                                        <TableCell sx={cellStyle}>1</TableCell>
-                                        <TableCell sx={{ ...cellStyle, fontWeight: "normal" }}> hello</TableCell>
-                                        <TableCell sx={{ ...cellStyle, fontWeight: "normal" }}>hello</TableCell>
-                                        <TableCell sx={{ ...cellStyle, fontWeight: "normal" }}>hello</TableCell>
-                                        <TableCell sx={{ ...cellStyle, fontWeight: "normal" }}>hello</TableCell>
-                                        <TableCell sx={{ ...cellStyle, fontWeight: "normal" }}>hello</TableCell>
-                                    </TableRow>
-                                </TableBody>
-                            </Table>
-                        </TableContainer>
-                    ) : (
-                        <TableContainer sx={{ maxWidth: 1150, margin: "auto", border: "1px solid #ddd", borderTop: "none" }}>
-                            
-                            <Table sx={{ borderCollapse: "collapse" }}>
-                                <TableHead>
-                                    <TableRow>
-                                        <TableCell width="5%" sx={headerCellStyle}>S.No</TableCell>
-                                        <TableCell width="30%" sx={headerCellStyle}>Points to be Discussed</TableCell>
-                                        <TableCell width="20%" sx={headerCellStyle}>Todo</TableCell>
-                                        {isAccpet && (
-                                            <TableCell width="15%" sx={headerCellStyle}>Status</TableCell>
-                                        )}
-                                        <TableCell width="15%" sx={headerCellStyle}>Responsibility</TableCell>
-                                        <TableCell width="15%" sx={headerCellStyle}>Deadline</TableCell>
-                                    </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                    {pointData.map((point, index) => (
-                                        <TableRow key={point.pointId}>
-                                            <TableCell sx={cellStyle}>{index + 1}</TableCell>
-
-                                            <TableCell sx={{ ...cellStyle, fontWeight: "normal", maxWidth: "300px" }}>
-                                                <TextField
-                                                    variant="standard"
-                                                    placeholder="Points forward"
-                                                    multiline
-                                                    fullWidth
-                                                    minRows={1}
-                                                    maxRows={4}
-                                                    defaultValue={point.point_name}
-                                                    InputProps={{
-                                                        disableUnderline: true,
-                                                        sx: { fontSize: '14px', fontWeight: 'bold' }
-                                                    }}
-                                                />
-                                            </TableCell>
-
-                                            <TableCell sx={cellStyle}>
-                                                <TextField
-                                                    variant="standard"
-                                                    placeholder="Add remarks"
-                                                    fullWidth
-                                                    defaultValue={point.todo}
-                                                    InputProps={{ disableUnderline: true }}
-                                                />
-                                            </TableCell>
-
-                                            {isAccpet && (
-                                                <TableCell sx={cellStyle}>
-                                                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                                                        {status !== "notCompleted" && (
-                                                            <Button
-                                                                variant="outlined"
-                                                                sx={{
-                                                                    color: "green",
-                                                                    borderColor: "green",
-                                                                    backgroundColor: "#e6f8e6",
-                                                                    textTransform: "none",
-                                                                    borderRadius: "14px",
-                                                                    padding: "6px 40px",
-                                                                    fontSize: '10px',
-                                                                    gap: 0.5,
-                                                                    "&:hover": { backgroundColor: "#d4edda" },
-                                                                }}
-                                                                onClick={() => setStatus("completed")}
-                                                            >
-                                                                Completed
-                                                            </Button>
-                                                        )}
-                                                        {status !== "completed" && (
-                                                            <Button
-                                                                variant="outlined"
-                                                                sx={{
-                                                                    color: "red",
-                                                                    borderColor: "red",
-                                                                    backgroundColor: "#fdecec",
-                                                                    textTransform: "none",
-                                                                    borderRadius: "14px",
-                                                                    padding: "6px 30px",
-                                                                    fontSize: '10px',
-                                                                    gap: 0.5,
-                                                                    "&:hover": { backgroundColor: "#f8d7da" },
-                                                                }}
-                                                                onClick={() => setStatus("notCompleted")}
-                                                            >
-                                                                Not Completed
-                                                            </Button>
-                                                        )}
-                                                    </Box>
-                                                </TableCell>
-                                            )}
-
-                                            <TableCell sx={cellStyle}>
-                                                <TextField variant="standard" placeholder="Select Member" fullWidth InputProps={{ disableUnderline: true }} value={point.name}/>
-                                            </TableCell>
-
-                                            <TableCell sx={cellStyle}>
-                                                <TextField variant="standard" placeholder="Select Date" fullWidth InputProps={{ disableUnderline: true }} />
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </TableContainer>
+                    {/* Tabs for Joined Meeting */}
+                    {onJoin && (
+                        <Box sx={{
+                            display: "flex",
+                            borderRadius: 2,
+                            overflow: "hidden",
+                            padding: '6px',
+                            backgroundColor: 'white',
+                            gap: 2,
+                            width: '100%',
+                            marginBottom: '16px'
+                        }}>
+                            <Button
+                                onClick={() => setSelectedTab("attendance")}
+                                sx={{
+                                    flex: 1,
+                                    backgroundColor: selectedTab === "attendance" ? "#4285F4" : "transparent",
+                                    color: selectedTab === "attendance" ? "#fff" : "#666",
+                                    "&:hover": { backgroundColor: selectedTab === "attendance" ? "#357ae8" : "#f0f0f0" },
+                                    textTransform: "none",
+                                    gap: 2,
+                                    transition: "background-color 0.3s, color 0.3s",
+                                }}
+                            >
+                                <AttendanceIcon /> Attendance
+                            </Button>
+                            <Button
+                                onClick={() => setSelectedTab("agenda")}
+                                sx={{
+                                    flex: 1,
+                                    backgroundColor: selectedTab === "agenda" ? "#4285F4" : "transparent",
+                                    color: selectedTab === "agenda" ? "#fff" : "#666",
+                                    "&:hover": { backgroundColor: selectedTab === "agenda" ? "#357ae8" : "#f0f0f0" },
+                                    textTransform: "none",
+                                    gap: 2,
+                                    transition: "background-color 0.3s, color 0.3s",
+                                }}
+                            >
+                                <AgendaIcon /> Agenda
+                            </Button>
+                        </Box>
                     )}
+
+                    {/* Points Table */}
+                    <TableContainer sx={{
+                        width: '100%',
+                        margin: "auto",
+                        border: "1px solid #ddd",
+                        borderTop: onJoin ? "none" : "1px solid #ddd"
+                    }}>
+                        <Table sx={{ borderCollapse: "collapse" }}>
+                            {onJoin && selectedTab === 'attendance' ? (
+                                <>
+                                    <TableHead>
+                                        <TableRow>
+                                            <TableCell width="5%" sx={{ ...headerCellStyle, textAlign: 'center' }}>S.No</TableCell>
+                                            <TableCell width="35%" sx={{ ...headerCellStyle, textAlign: 'center' }}>Name & Designation</TableCell>
+                                            <TableCell width="25%" sx={{ ...headerCellStyle, textAlign: 'center' }}>Role</TableCell>
+                                            <TableCell width="25%" sx={{ ...headerCellStyle, textAlign: 'center' }}>Attendance</TableCell>
+                                        </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                        {meetingData?.members && Object.entries(meetingData.members).flatMap(([role, members]) =>
+                                            members.map((member, index) => (
+                                                <TableRow key={`${role}-${index}`}>
+                                                    <TableCell sx={{ ...cellStyle, textAlign: "center" }}>{index + 1}</TableCell>
+                                                    <TableCell sx={{ ...cellStyle, textAlign: "center" }}>{member.name}</TableCell>
+                                                    <TableCell sx={{ ...cellStyle, textAlign: "center" }}>{role}</TableCell>
+                                                    <TableCell sx={{ ...cellStyle, textAlign: "center" }}>
+                                                        <Button
+                                                            variant="outlined"
+                                                            sx={{
+                                                                color: "green",
+                                                                borderColor: "green",
+                                                                backgroundColor: "#e6f8e6",
+                                                                textTransform: "none",
+                                                                borderRadius: "14px",
+                                                                padding: "6px 40px",
+                                                                fontSize: '10px',
+                                                                gap: 0.5,
+                                                                "&:hover": { backgroundColor: "#d4edda" },
+                                                            }}
+                                                        >
+                                                            <CheckBoxIcon sx={{ color: "green", fontSize: '10px' }} />
+                                                            Present
+                                                        </Button>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))
+                                        )}
+                                    </TableBody>
+                                </>
+                            ) : onJoin && selectedTab === 'agenda' ? (
+                                <>
+                                    <TableHead>
+                                        <TableRow>
+                                            <TableCell width="5%" sx={{ ...headerCellStyle, textAlign: 'center' }}>S.No</TableCell>
+                                            <TableCell width="30%" sx={{ ...headerCellStyle, textAlign: 'center' }}>Points to be Discussed</TableCell>
+                                            <TableCell width="20%" sx={{ ...headerCellStyle, textAlign: 'center' }}>Remarks</TableCell>
+                                            <TableCell width="15%" sx={{ ...headerCellStyle, textAlign: 'center' }}>Status</TableCell>
+                                            <TableCell width="15%" sx={{ ...headerCellStyle, textAlign: 'center' }}>Responsibility</TableCell>
+                                            <TableCell width="15%" sx={{ ...headerCellStyle, textAlign: 'center' }}>Deadline</TableCell>
+                                        </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                        {pointData.map((point, index) => (
+                                            <TableRow key={point.pointId}>
+                                                <TableCell sx={{ ...cellStyle, textAlign: "center" }}>{index + 1}</TableCell>
+                                                <TableCell sx={{ ...cellStyle, textAlign: "center" }}>{point.point_name}</TableCell>
+                                                <TableCell sx={{ ...cellStyle, textAlign: "center" }}>{point.remarks || '-'}</TableCell>
+                                                <TableCell sx={{ ...cellStyle, textAlign: "center" }}>
+                                                    {point.status === 'completed' ? '✅ Completed' : point.status === 'notCompleted' ? '❌ Not Completed' : '-'}
+                                                </TableCell>
+                                                <TableCell sx={{ ...cellStyle, textAlign: "center" }}>{point.name || '-'}</TableCell>
+                                                <TableCell sx={{ ...cellStyle, textAlign: "center" }}>{point.deadline || '-'}</TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </>
+                            ) : (
+                                <>
+                                    <TableHead>
+                                        <TableRow>
+                                            <TableCell width="5%" sx={headerCellStyle}>S.No</TableCell>
+                                            <TableCell width="30%" sx={headerCellStyle}>Points to be Discussed</TableCell>
+                                            <TableCell width="20%" sx={headerCellStyle}>Todo</TableCell>
+                                            {isAccpet && <TableCell width="15%" sx={headerCellStyle}>Status</TableCell>}
+                                            <TableCell width="15%" sx={headerCellStyle}>Responsibility</TableCell>
+                                            <TableCell width="15%" sx={headerCellStyle}>Deadline</TableCell>
+                                        </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                        {pointData.map((point, index) => (
+                                            <TableRow key={point.pointId}>
+                                                <TableCell sx={cellStyle}>{index + 1}</TableCell>
+                                                <TableCell sx={{ ...cellStyle, fontWeight: "normal", maxWidth: "300px" }}>
+                                                    <TextField
+                                                        variant="standard"
+                                                        placeholder="Points forward"
+                                                        multiline
+                                                        fullWidth
+                                                        minRows={1}
+                                                        maxRows={4}
+                                                        value={point.point_name}
+                                                        InputProps={{
+                                                            disableUnderline: true,
+                                                            sx: { fontSize: '14px', fontWeight: 'bold' }
+                                                        }}
+                                                    />
+                                                </TableCell>
+                                                <TableCell sx={cellStyle}>
+                                                    <TextField
+                                                        variant="standard"
+                                                        placeholder="Add remarks"
+                                                        fullWidth
+                                                        value={point.todo}
+                                                        onChange={(e) => handleTodoChange(point.pointId, e.target.value)}
+                                                        InputProps={{ disableUnderline: true }}
+                                                    />
+                                                </TableCell>
+                                                {isAccpet && (
+                                                    <TableCell sx={cellStyle}>
+                                                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                                                            {point.point_status !== "not completed" && (
+                                                                <Button
+                                                                    variant="outlined"
+                                                                    sx={{
+                                                                        color: "green",
+                                                                        borderColor: "green",
+                                                                        backgroundColor: "#e6f8e6",
+                                                                        textTransform: "none",
+                                                                        borderRadius: "14px",
+                                                                        padding: "6px 40px",
+                                                                        fontSize: '10px',
+                                                                        gap: 0.5,
+                                                                        "&:hover": { backgroundColor: "#d4edda" },
+                                                                    }}
+                                                                    onClick={() => sendTodo(point.pointId, point.todo, "completed")}
+                                                                >
+                                                                    <CheckBoxIcon sx={{ color: "green", fontSize: '10px' }} />
+                                                                    Completed
+                                                                </Button>
+                                                            )}
+                                                            {point.point_status !== "completed" && (
+                                                                <Button
+                                                                    variant="outlined"
+                                                                    sx={{
+                                                                        color: "red",
+                                                                        borderColor: "red",
+                                                                        backgroundColor: "#fdecec",
+                                                                        textTransform: "none",
+                                                                        borderRadius: "14px",
+                                                                        padding: "6px 30px",
+                                                                        fontSize: '10px',
+                                                                        gap: 0.5,
+                                                                        "&:hover": { backgroundColor: "#f8d7da" },
+                                                                    }}
+                                                                    onClick={() => sendTodo(point.pointId, point.todo, "not completed")}
+                                                                >
+                                                                    <CancelIcon sx={{ color: "red", fontSize: '10px' }} />
+                                                                    Not Completed
+                                                                </Button>
+                                                            )}
+                                                        </Box>
+                                                    </TableCell>
+                                                )}
+                                                <TableCell sx={cellStyle}>
+                                                    <TextField
+                                                        variant="standard"
+                                                        placeholder="Select Member"
+                                                        fullWidth
+                                                        InputProps={{ disableUnderline: true }}
+                                                        value={point.name}
+                                                    />
+                                                </TableCell>
+                                                <TableCell sx={cellStyle}>
+                                                    <TextField
+                                                        variant="standard"
+                                                        placeholder="Select Date"
+                                                        fullWidth
+                                                        InputProps={{ disableUnderline: true }}
+                                                        value={point.deadline || ''}
+                                                    />
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </>
+                            )}
+                        </Table>
+                    </TableContainer>
                 </Box>
             </Box>
         </Box>
-    )
+    );
 }
 
 const cellStyle = {

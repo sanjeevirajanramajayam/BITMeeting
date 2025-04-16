@@ -68,9 +68,9 @@ export default function VenueTable({ onVenueSelect, onClose }) {
     if (statusSort) {
         sortedVenues.sort((a, b) => {
             if (statusSort === "asc") {
-                return a.status === b.status ? 0 : a.status === "Active" ? -1 : 1;
+                return a.status === b.status ? 0 : a.status === "available" ? -1 : 1;
             } else {
-                return a.status === b.status ? 0 : a.status === "Active" ? 1 : -1;
+                return a.status === b.status ? 0 : a.status === "available" ? 1 : -1;
             }
         });
     }
@@ -155,8 +155,8 @@ export default function VenueTable({ onVenueSelect, onClose }) {
                                         <Checkbox
                                             checked={vselect === venue.id}
                                             onChange={() => handleSel(venue.id)}
-                                            disabled={venue.status != "Active"}
-                                            icon={<span style={{ width: 24, height: 24, borderRadius: "50%", border: "2px solid #D3D3D3", backgroundColor: venue.status != "Active" ? "#DADADA" : "transparent", cursor: venue.status != "Active" ? "not-allowed" : "pointer" }} />}
+                                            disabled={venue.status != "available"}
+                                            icon={<span style={{ width: 24, height: 24, borderRadius: "50%", border: "2px solid #D3D3D3", backgroundColor: venue.status != "available" ? "#DADADA" : "transparent", cursor: venue.status != "available" ? "not-allowed" : "pointer" }} />}
                                             checkedIcon={
                                                 <span style={{ width: 24, height: 24, borderRadius: "50%", backgroundColor: "#1976D2", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                                     <Check style={{ color: "white", fontSize: 18, alignItems: 'center' }} />
@@ -168,8 +168,8 @@ export default function VenueTable({ onVenueSelect, onClose }) {
 
                                     {/* Status */}
                                     <TableCell>
-                                        <Box sx={{ display: "flex", alignItems: "center", gap: "4px", backgroundColor: venue.status=="Active" ? "#e8f5e9" : "#ffebee", color: venue.status=="Active" ? "#2e7d32" : "#d32f2f", padding: "4px 8px", borderRadius: "16px", fontSize: "12px", fontWeight: 500, width: "fit-content" }}>
-                                            <Box sx={{ width: "5px", height: "5px", borderRadius: "50%", backgroundColor: venue.status=="Active" ? "#2e7d32" : "#d32f2f" }} />
+                                        <Box sx={{ display: "flex", alignItems: "center", gap: "4px", backgroundColor: venue.status=="available" ? "#e8f5e9" : "#ffebee", color: venue.status=="available" ? "#2e7d32" : "#d32f2f", padding: "4px 8px", borderRadius: "16px", fontSize: "12px", fontWeight: 500, width: "fit-content" }}>
+                                            <Box sx={{ width: "5px", height: "5px", borderRadius: "50%", backgroundColor: venue.status=="available" ? "#2e7d32" : "#d32f2f" }} />
                                             {venue.status}
                                         </Box>
                                     </TableCell>
@@ -185,7 +185,7 @@ export default function VenueTable({ onVenueSelect, onClose }) {
                                     </TableCell>
 
                                     <TableCell>
-                                        {venue.status === "In Active" ? (
+                                        {venue.status === "In available" ? (
                                             <Typography sx={{ color: "#1A79E6", cursor: "pointer", textDecoration: "underline" }}>
                                                 View
                                             </Typography>

@@ -20,6 +20,7 @@ import DatePick from "../components/date";
 import DateTimePicker from "../components/datetime";
 import RepeatOverlay from "../components/RepeatOverlay.jsx";
 import crt from "../assets/Featured icon.png";
+import { set } from "date-fns";
 
 const Submit = () => {
   return (
@@ -130,7 +131,8 @@ export default function Cmeeting({ onBack }) {
         // Format points data for the API
         points: discussionPoints.map(point => ({
           point: point.point,
-          point_name: point.point // Include both formats to be safe
+          point_name: point.point, // Include both formats to be safe
+          point_deadline: point.deadline
         }))
       };
 
@@ -154,6 +156,9 @@ export default function Cmeeting({ onBack }) {
       const meetingId = response.data.meetingId;
 
       // Prepare an array of responsibility assignment promises
+
+      console.log(discussionPoints)
+
       const responsibilityPromises = discussionPoints
         .filter(point => point.responsibility && point.responsibility.length > 0)
         .map(async (point, index) => {
@@ -272,6 +277,10 @@ export default function Cmeeting({ onBack }) {
   const [openDateIndex, setOpenDateIndex] = useState(null);
   const handleDateConfirm = (date, index) => {
     setSelectedDate((prev) => ({ ...prev, [index]: date.format("YYYY-MM-DD") }));
+    var discussionPointsNew = discussionPoints;
+    discussionPointsNew[index].deadline = date.format("YYYY-MM-DD");
+    console.log(discussionPointsNew)
+    setDiscussionPoints(discussionPointsNew)
     setOpenDateIndex(null);
   };
 
@@ -573,7 +582,7 @@ export default function Cmeeting({ onBack }) {
             updatedPoints[index].responsibility = newValue ? [newValue] : [];
             setDiscussionPoints(updatedPoints);
           }}
-          options={allMembers}
+          options={allMembers.filter(member => roles.some(role => role.members.some(m => m.id === member.id)))}
           getOptionLabel={(option) => option.name}
           isOptionEqualToValue={(option, value) => option.id === value.id}
           renderInput={(params) => (
@@ -707,7 +716,7 @@ export default function Cmeeting({ onBack }) {
     }
   };
 
-  console.log(selectedDate, selectedDateTime);
+  console.log(discussionPoints  );
 
   return (
     <Box>

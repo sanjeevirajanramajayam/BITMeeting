@@ -142,8 +142,12 @@ const createMeeting = async (req, res) => {
         }
 
         const pointPromises = points.map(point =>
-            db.query('INSERT INTO meeting_points (meeting_id, point_name) VALUES (?, ?)', [meetingId, point.point])
+            db.query(
+                'INSERT INTO meeting_points (meeting_id, point_name, point_deadline) VALUES (?, ?, ?)',
+                [meetingId, point.point_name || point.point, point.point_deadline || null]
+            )
         );
+
 
         const memberIds = [...new Set(roles.flatMap(role => role.members))];
 
@@ -187,6 +191,47 @@ const createMeeting = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Server error'
+        });
+    }
+};
+
+const getUserMeetingResponse = async (req, res) => {
+    const {
+        meetingId
+    } = req.body;
+    const userId = req.user.userId;
+
+    console.log(meetingId, userId);
+
+    if (!meetingId) {
+        return res.status(400).json({
+            error: 'meetingId is required'
+        });
+    }
+
+    try {
+        const query = `
+            SELECT accepted_status 
+            FROM accepted_members 
+            WHERE meeting_id = ? AND user_id = ?
+        `;
+
+        const [rows] = await db.execute(query, [meetingId, userId]);
+
+        if (rows.length === 0) {
+            return res.status(200).json({
+                error: 'No response found for the given meeting and user'
+            });
+        }
+
+        return res.status(200).json({
+            accepted_status: rows[0].accepted_status
+        });
+
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({
+            error: 'An error occurred while fetching the response'
         });
     }
 };
@@ -542,6 +587,7 @@ const getUserResponsibilities = async (req, res) => {
                 mp.point_name,
                 mp.todo,
                 mp.remarks,
+                mp.point_status,
                 u.name
             FROM meeting_points mp JOIN users u ON 
             mp.point_responsibility = u.id
@@ -577,7 +623,7 @@ const setTodoForPoint = async (req, res) => {
         status,
         remarks
     } = req.body;
-    const accessUserId = req.user.userId; // Logged-in user's ID
+    const user_id = req.user.userId; // Logged-in user's ID
 
     if (!pointId || !status) {
         return res.status(400).json({
@@ -607,36 +653,10 @@ const setTodoForPoint = async (req, res) => {
             [pointId]
         );
 
-        if (pointRows.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'No meeting point with responsibility or id doesn\'t exist'
-            });
-        }
 
-        const {
-            point_responsibility
-        } = pointRows[0];
-
-        // Fetch userId from meeting_members where id = point_responsibility
-        const [memberRows] = await db.query(
-            'SELECT user_id FROM meeting_members WHERE id = ?;',
-            [point_responsibility]
-        );
-
-        if (memberRows.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'Responsible member not found'
-            });
-        }
-
-        const {
-            user_id
-        } = memberRows[0];
 
         // Only allow responsible user to update 'todo'
-        if (status === 'completed' && user_id !== accessUserId) {
+        if (status === 'completed' && user_id !== pointRows[0].point_responsibility) {
             return res.status(403).json({
                 success: false,
                 message: 'You are not authorized to update the todo for this point'
@@ -648,14 +668,14 @@ const setTodoForPoint = async (req, res) => {
         if (status === 'completed') {
             updateQuery = `
                 UPDATE meeting_points 
-                SET todo = ?, point_status = ? 
+                SET todo = ?, point_status = ?, approved_by_admin = null
                 WHERE id = ?;
             `;
             queryParams = [todo, status, pointId];
         } else {
             updateQuery = `
                 UPDATE meeting_points 
-                SET remarks = ?, point_status = ? 
+                SET remarks = ?, point_status = ?, approved_by_admin = null
                 WHERE id = ?;
             `;
             queryParams = [remarks, status, pointId];
@@ -703,6 +723,50 @@ const getPoints = async (req, res) => {
         console.error('Error fetching points:', error);
         res.status(500).json({
             message: 'Failed to fetch points for the meeting.'
+        });
+    }
+};
+
+const respondToMeetingInvite = async (req, res) => {
+    const {
+        meetingId,
+        status
+    } = req.body;
+    const userId = req.user.userId;
+
+    if (!meetingId || !['accept', 'reject'].includes(status)) {
+        return res.status(400).json({
+            success: false,
+            message: 'Valid meetingId and status ("accept" or "reject") are required'
+        });
+    }
+
+    try {
+        // Check if the meeting exists
+        const [meetingRows] = await db.query('SELECT id FROM meeting WHERE id = ?', [meetingId]);
+        if (meetingRows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Meeting not found'
+            });
+        }
+
+        // Insert or update response
+        const [result] = await db.query(`
+            INSERT INTO accepted_members (user_id, meeting_id, accepted_status)
+            VALUES (?, ?, ?)
+            ON DUPLICATE KEY UPDATE accepted_status = VALUES(accepted_status)
+        `, [userId, meetingId, status]);
+
+        return res.status(200).json({
+            success: true,
+            message: `Meeting ${status} successfully`
+        });
+    } catch (error) {
+        console.error('Error responding to meeting:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Server error'
         });
     }
 };
@@ -986,9 +1050,10 @@ const getUserMeetings = async (req, res) => {
 
         // 3. Fetch full meeting details with creator's username
         const [meetingDetails] = await db.query(
-            `SELECT m.*, u.name AS created_by_username
+            `SELECT m.*, u.name AS created_by_username, v.name as venue_name
              FROM meeting m
-             JOIN users u ON m.created_by = u.id
+             JOIN users u JOIN venues v ON m.created_by = u.id AND
+             m.venue_id = v.id
              WHERE m.id IN (${placeholders})`,
             meetingIds
         );
@@ -1004,8 +1069,7 @@ const getUserMeetings = async (req, res) => {
 
         // 5. Fetch meeting points
         const [meetingPoints] = await db.query(
-            `SELECT mp.meeting_id, mp.point_name, mp.todo, mp.point_status, u.name, mp.point_deadline
-             FROM bit_meeting_test.meeting_points mp
+            `SELECT mp.*, u.name             FROM bit_meeting_test.meeting_points mp
              LEFT JOIN bit_meeting_test.users u ON mp.point_responsibility = u.id
              WHERE meeting_id IN (${placeholders})`,
             meetingIds
@@ -1044,7 +1108,6 @@ const getUserMeetings = async (req, res) => {
         });
 
 
-        console.log('asdfasdsdf', membersByMeeting)
         // 7. Group meeting points by meeting_id
         const pointsByMeeting = {};
         meetingPoints.forEach(point => {
@@ -1056,10 +1119,12 @@ const getUserMeetings = async (req, res) => {
                 todo: point.todo,
                 point_status: point.point_status,
                 responsible: point.name,
-                point_deadline: point.point_deadline
+                point_deadline: point.point_deadline,
+                point_id: point.id,
+                approved_by_admin: point.approved_by_admin,
+                old_todo: point.old_todo
             });
         });
-        console.log(meetingDetails)
         // 8. Add role info, members, and points to each meeting
         const finalMeetings = meetingDetails.map(meeting => ({
             ...meeting,
@@ -1245,7 +1310,7 @@ const approvePoint = async (req, res) => {
         approvedDecision,
     } = req.body;
 
-    var accessUserId = req.user.userId;
+    const accessUserId = req.user.userId;
 
     if (!pointId || !approvedDecision || !accessUserId) {
         return res.status(400).json({
@@ -1255,48 +1320,52 @@ const approvePoint = async (req, res) => {
     }
 
     try {
-        var [
-            [meetingId]
-        ] = await db.query(
+        const [[meetingId]] = await db.query(
             `SELECT meeting_id FROM meeting_points WHERE id = ?`,
             [pointId]
         );
-        var [
-            [createdUserId]
-        ] = await db.query(
+
+        const [[createdUserId]] = await db.query(
             `SELECT created_by FROM meeting WHERE id = ?`,
             [meetingId.meeting_id]
         );
-    } catch (error) {
-        console.error("Error updating attendance:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Server error"
-        });
-    }
 
-    if (createdUserId.created_by !== accessUserId) {
-        return res.status(400).json({
-            success: false,
-            message: `Authorization is required`
-        });
-    }
+        if (createdUserId.created_by !== accessUserId) {
+            return res.status(403).json({
+                success: false,
+                message: `Authorization is required`
+            });
+        }
 
-    try {
-        await db.query(
-            `UPDATE meeting_points SET approved_by_admin = ? WHERE meeting_id = ? and id = ?;`,
-            [approvedDecision, meetingId.meeting_id, pointId]
-        );
+        if (approvedDecision === "NOT APPROVED") {
+            await db.query(
+                `UPDATE meeting_points 
+                 SET approved_by_admin = ?, 
+                     old_todo = todo, 
+                     todo = NULL, 
+                     point_status = NULL 
+                 WHERE meeting_id = ? AND id = ?`,
+                [approvedDecision, meetingId.meeting_id, pointId]
+            );
+        } else {
+            await db.query(
+                `UPDATE meeting_points 
+                 SET approved_by_admin = ? 
+                 WHERE meeting_id = ? AND id = ?`,
+                [approvedDecision, meetingId.meeting_id, pointId]
+            );
+        }
 
-        res.status(201).json({
+        return res.status(200).json({
             success: true,
             message: `Point ${pointId} marked ${approvedDecision}.`
         });
+
     } catch (error) {
-        console.error("Error marking meeting point:", error);
-        res.status(500).json({
+        console.error("Error approving point:", error);
+        return res.status(500).json({
             success: false,
-            message: 'Server error'
+            message: "Server error"
         });
     }
 };
@@ -1559,7 +1628,6 @@ const startMeeting = async (req, res) => {
     }
 };
 
-
 const endMeeting = async (req, res) => {
     const {
         meetingId
@@ -1785,5 +1853,7 @@ module.exports = {
     getAllMeetings,
     handleLogin,
     verifyToken,
-    getPoints
+    getPoints,
+    respondToMeetingInvite,
+    getUserMeetingResponse
 }

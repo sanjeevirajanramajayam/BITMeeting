@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { AiOutlineHome, AiOutlineBarChart, AiOutlineBell, AiOutlineDatabase, AiOutlineLogout } from 'react-icons/ai';
 import { FaHeadset } from 'react-icons/fa';
@@ -8,12 +8,28 @@ import ProfileImage from '../assets/profileimage.png'; // Add your profile image
 
 const Sidebar = () => {
     const location = useLocation();
-    
-    // User details - replace with actual user data
-    const userDetails = {
-        name: "John Doe",
-        email: "john.doe@example.com"
-    };
+
+    // State to store user details
+    const [userDetails, setUserDetails] = useState({
+        name: "Loading...",
+        email: "Loading..."
+    });
+
+    // Fetch user details from localStorage on component mount
+    useEffect(() => {
+        const userData = localStorage.getItem('userId');
+        if (userData) {
+            try {
+                const parsedUser = JSON.parse(userData);
+                setUserDetails({
+                    name: parsedUser.name || parsedUser.username || "User",
+                    email: parsedUser.email || "No email available"
+                });
+            } catch (error) {
+                console.error("Error parsing user data:", error);
+            }
+        }
+    }, []);
 
     return (
         <div className="sidebar">
@@ -33,8 +49,8 @@ const Sidebar = () => {
                 >
                     {({ isActive }) => (
                         <>
-                            <AiOutlineHome 
-                                size={24} 
+                            <AiOutlineHome
+                                size={24}
                                 className={`icon ${isActive ? "active" : ""}`}
                                 style={{ color: isActive ? '#007bff' : '#46555F' }}
                             />
@@ -42,14 +58,14 @@ const Sidebar = () => {
                         </>
                     )}
                 </NavLink>
-                <NavLink 
-                    to="/database" 
+                <NavLink
+                    to="/database"
                     className={({ isActive }) => `menu-item ${isActive ? "active" : ""}`}
                 >
                     {({ isActive }) => (
                         <>
-                            <AiOutlineDatabase 
-                                size={24} 
+                            <AiOutlineDatabase
+                                size={24}
                                 className={`icon ${isActive ? "active" : ""}`}
                                 style={{ color: isActive ? '#007bff' : '#46555F' }}
                             />
@@ -57,14 +73,14 @@ const Sidebar = () => {
                         </>
                     )}
                 </NavLink>
-                <NavLink 
-                    to="/reports" 
+                <NavLink
+                    to="/reports"
                     className={({ isActive }) => `menu-item ${isActive ? "active" : ""}`}
                 >
                     {({ isActive }) => (
                         <>
-                            <AiOutlineBarChart 
-                                size={24} 
+                            <AiOutlineBarChart
+                                size={24}
                                 className={`icon ${isActive ? "active" : ""}`}
                                 style={{ color: isActive ? '#007bff' : '#46555F' }}
                             />
@@ -76,14 +92,14 @@ const Sidebar = () => {
 
             {/* Notification Section */}
             <div className="sidebar-notification">
-                <NavLink 
-                    to="/support" 
+                <NavLink
+                    to="/support"
                     className={({ isActive }) => `menu-item ${isActive ? "active" : ""}`}
                 >
                     {({ isActive }) => (
                         <>
-                            <FaHeadset 
-                                size={24} 
+                            <FaHeadset
+                                size={24}
                                 className={`icon ${isActive ? "active" : ""}`}
                                 style={{ color: isActive ? '#007bff' : '#46555F' }}
                             />
@@ -93,13 +109,13 @@ const Sidebar = () => {
                 </NavLink>
             </div>
 
-            <NavLink 
-        to="/logout" 
-    className="menu-item logout-button"
->
-    <AiOutlineLogout size={24} className="icon" />
-    <div className="tooltip">Logout</div>
-</NavLink>
+            <NavLink
+                to="/logout"
+                className="menu-item logout-button"
+            >
+                <AiOutlineLogout size={24} className="icon" />
+                <div className="tooltip">Logout</div>
+            </NavLink>
 
 
             {/* Profile Section */}

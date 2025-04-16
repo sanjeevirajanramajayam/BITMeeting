@@ -21,7 +21,9 @@ const {
     getAllMeetings,
     handleLogin,
     verifyToken,
-    getPoints
+    getPoints,
+    respondToMeetingInvite,
+    getUserMeetingResponse
 } = require('../controllers/meetingController');
 
 router.post('/create', verifyToken, createMeeting)
@@ -44,5 +46,7 @@ router.post('/end-meeting', verifyToken, endMeeting)
 router.post('/login', handleLogin)
 router.get('/meeting/:id', verifyToken, getMeetingbyId)
 router.get('/:meetingId/points', getPoints)
+router.post('/respond', verifyToken, respondToMeetingInvite)
+router.post('/get-response', verifyToken, getUserMeetingResponse)
 
 module.exports = router;
