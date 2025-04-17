@@ -6,13 +6,14 @@ import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
 import CloseIcon from "@mui/icons-material/Close";
 import { CheckBox } from "@mui/icons-material";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import AttendanceIcon from "@mui/icons-material/HowToReg";
 import AgendaIcon from "@mui/icons-material/Groups";
 import axios from "axios";
 import { Cancel } from "@mui/icons-material";
 import CancelIcon from '@mui/icons-material/Cancel';
 import CheckBoxIcon from '@mui/icons-material/CheckBox';
+import MeetingRejection from "../components/MeetingRejection";
 
 // import { CheckBoxI } from "@mui/icons-material";
 import { FormatBold, FormatItalic, FormatUnderlined, FormatAlignLeft, FormatAlignCenter, FormatAlignRight, Link } from "@mui/icons-material";
@@ -108,6 +109,7 @@ const Reject = ({ onClose, handleSave }) => {
 };
 
 export default function JoinMeet({ onBack }) {
+    const navigate = useNavigate();
     const [openRejectCard, setOpenRejectCard] = useState(false);
     const [isAccpet, setIsAccept] = useState(false);
     const [onJoin, setOnJoin] = useState(false);
@@ -124,6 +126,7 @@ export default function JoinMeet({ onBack }) {
 
     const handleCloseRejectCard = () => {
         setOpenRejectCard(false);
+        navigate('/dashboard')
     };
 
     const sendTodo = async (pointId, todo, status) => {
@@ -405,35 +408,12 @@ export default function JoinMeet({ onBack }) {
                         alignItems: "center",
                         zIndex: 999
                     }}>
-                        <Box sx={{
-                            backgroundColor: 'white',
-                            padding: '20px',
-                            borderRadius: '8px',
-                            width: '400px'
-                        }}>
-                            <Typography variant="h6" gutterBottom>Reject Meeting</Typography>
-                            <Typography variant="body1" sx={{ marginBottom: '20px' }}>
-                                Are you sure you want to reject this meeting invitation?
-                            </Typography>
-                            <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                                <Button
-                                    variant="outlined"
-                                    onClick={handleCloseRejectCard}
-                                >
-                                    Cancel
-                                </Button>
-                                <Button
-                                    variant="contained"
-                                    color="error"
-                                    onClick={() => {
-                                        acceptMeeting('reject');
-                                        handleCloseRejectCard();
-                                    }}
-                                >
-                                    Reject
-                                </Button>
-                            </Box>
-                        </Box>
+                        <MeetingRejection
+                            onClose={handleCloseRejectCard}
+                            meetingId={meetingData.id}   // You must pass this from parent
+                            token={localStorage.getItem('token')}               // Your JWT token from context/localStorage
+                        />
+
                     </Box>
                 )}
 

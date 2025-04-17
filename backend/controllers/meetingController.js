@@ -1017,22 +1017,33 @@ const getUserMeetings = async (req, res) => {
             [id]
         );
 
+        // 3. Get rejected meeting IDs by the user
+        const [rejectedMeetings] = await db.query(
+            `SELECT meeting_id FROM meeting_rejections WHERE user_id = ?;`,
+            [id]
+        );
+
+        // Create a Set of rejected meeting IDs for fast lookup
+        const rejectedMeetingIds = new Set(rejectedMeetings.map(r => r.meeting_id));
+
         // Combine meeting IDs from both queries into a map with roles
         const meetingIdRoleMap = new Map();
 
-        // Add member meetings with their roles
+        // Add member meetings with their roles (excluding rejected)
         memberMeetings.forEach(({
             meeting_id,
             role
         }) => {
-            meetingIdRoleMap.set(meeting_id, role);
+            if (!rejectedMeetingIds.has(meeting_id)) {
+                meetingIdRoleMap.set(meeting_id, role);
+            }
         });
 
-        // Add creator meetings with default 'Admin' role if not already a member
+        // Add creator meetings with default 'Admin' role (excluding rejected)
         creatorMeetings.forEach(({
             id: meeting_id
         }) => {
-            if (!meetingIdRoleMap.has(meeting_id)) {
+            if (!rejectedMeetingIds.has(meeting_id) && !meetingIdRoleMap.has(meeting_id)) {
                 meetingIdRoleMap.set(meeting_id, 'Admin');
             }
         });
@@ -1115,10 +1126,12 @@ const getUserMeetings = async (req, res) => {
                 pointsByMeeting[point.meeting_id] = [];
             }
             pointsByMeeting[point.meeting_id].push({
+                point_id: point.id,
                 point_name: point.point_name,
                 todo: point.todo,
                 point_status: point.point_status,
                 responsible: point.name,
+                responsibleId: point.point_responsibility,
                 point_deadline: point.point_deadline,
                 point_id: point.id,
                 approved_by_admin: point.approved_by_admin,
@@ -1153,10 +1166,9 @@ const getUserMeetings = async (req, res) => {
 const rejectMeeting = async (req, res) => {
     const {
         meetingId,
-        userId,
         reason
     } = req.body;
-
+    const userId = req.user.userId
     if (!meetingId || !userId) {
         return res.status(400).json({
             success: false,
@@ -1320,12 +1332,16 @@ const approvePoint = async (req, res) => {
     }
 
     try {
-        const [[meetingId]] = await db.query(
+        const [
+            [meetingId]
+        ] = await db.query(
             `SELECT meeting_id FROM meeting_points WHERE id = ?`,
             [pointId]
         );
 
-        const [[createdUserId]] = await db.query(
+        const [
+            [createdUserId]
+        ] = await db.query(
             `SELECT created_by FROM meeting WHERE id = ?`,
             [meetingId.meeting_id]
         );
@@ -1482,11 +1498,10 @@ const getMeetingAgenda = async (req, res) => {
                 mp.todo,
                 mp.remarks,
                 mp.point_status,
-                mm.user_id AS responsible_user_id,
+                mp.point_responsibility AS responsible_user_id,
                 u.name AS responsible_user_name
              FROM meeting_points mp
-             LEFT JOIN meeting_members mm ON mp.point_responsibility = mm.id
-             LEFT JOIN users u ON mm.user_id = u.id
+             LEFT JOIN users u ON mp.point_responsibility = u.id
              WHERE mp.meeting_id = ?
              ORDER BY mp.id`,
             [id]
@@ -1832,6 +1847,54 @@ const verifyToken = (req, res, next) => {
     }
 };
 
+const getMeetingStatus = async (req, res) => {
+    const { meetingId } = req.params;
+
+    if (!meetingId) {
+        return res.status(400).json({
+            success: false,
+            message: "meetingId is required.",
+        });
+    }
+
+    try {
+        const [[meeting]] = await db.query(
+            `SELECT id, meeting_name, meeting_status, start_time, end_time, created_by
+             FROM meeting
+             WHERE id = ?`,
+            [meetingId]
+        );
+
+        if (!meeting) {
+            return res.status(404).json({
+                success: false,
+                message: "Meeting not found.",
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            meeting: {
+                id: meeting.id,
+                name: meeting.meeting_name,
+                status: meeting.meeting_status,
+                startTime: meeting.start_time,
+                endTime: meeting.end_time,
+                createdBy: meeting.created_by,
+            },
+        });
+
+    } catch (error) {
+        console.error("Error fetching meeting status:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: error.message,
+        });
+    }
+};
+
+
 module.exports = {
     createMeeting,
     assignResponsibility,
@@ -1855,5 +1918,6 @@ module.exports = {
     verifyToken,
     getPoints,
     respondToMeetingInvite,
-    getUserMeetingResponse
+    getUserMeetingResponse,
+    getMeetingStatus
 }

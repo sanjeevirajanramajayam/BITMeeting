@@ -23,7 +23,8 @@ const {
     verifyToken,
     getPoints,
     respondToMeetingInvite,
-    getUserMeetingResponse
+    getUserMeetingResponse,
+    getMeetingStatus
 } = require('../controllers/meetingController');
 
 router.post('/create', verifyToken, createMeeting)
@@ -35,7 +36,7 @@ router.post('/set-todo', verifyToken, setTodoForPoint)
 router.post('/mark-attendence', verifyToken, markAttendance)
 router.post('/forward-point', verifyToken, forwardMeetingPoint)
 router.post('/update', updateMeeting)
-router.post('/reject', rejectMeeting)
+router.post('/reject', verifyToken,rejectMeeting)
 router.get('/get-rejection-records/:id', getUserRejectionsById)
 router.get('/get-attendance-records/:id', getAttendanceRecords)
 router.post('/approve-point', verifyToken, approvePoint)
@@ -48,5 +49,6 @@ router.get('/meeting/:id', verifyToken, getMeetingbyId)
 router.get('/:meetingId/points', getPoints)
 router.post('/respond', verifyToken, respondToMeetingInvite)
 router.post('/get-response', verifyToken, getUserMeetingResponse)
+router.get('/get-meeting-status/:meetingId', verifyToken, getMeetingStatus)
 
 module.exports = router;

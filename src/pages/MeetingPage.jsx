@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Box, Typography, Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, IconButton } from "@mui/material";
+import { Box, Typography, Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, IconButton, Tooltip } from "@mui/material";
 import Autocomplete from '@mui/material/Autocomplete';
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
@@ -11,7 +11,10 @@ import ForwardingForm from "./MeetingPage2";
 import image from "../assets/bannariammanheader.png";
 import { useNavigate } from "react-router-dom";
 import { useLocation } from 'react-router-dom';
-import axios from "axios";
+import InfoIcon from '@mui/icons-material/Info';
+import axios, { all } from "axios";
+import Reason from "../components/ViewReason";
+import { format } from "date-fns";
 
 // Table cell styles
 const cellStyle = {
@@ -32,6 +35,20 @@ const headerStyle = {
 };
 
 export default function StartMeet({ handleBack }) {
+
+    const [selectedReason, setSelectedReason] = useState(null);
+
+    const handleViewReason = (userId, username) => {
+        const rejection = rejectionRecords.find((r) => r.user_id === userId);
+        if (rejection) {
+            setSelectedReason({
+                name: meetingData.title, // Replace with actual meeting name if available
+                reason: rejection.reason,
+                userName: username, // You should implement this function
+            });
+        }
+    };
+
     const location = useLocation();
     const { meetingData } = location.state || {};
     const navigate = useNavigate();
@@ -42,6 +59,8 @@ export default function StartMeet({ handleBack }) {
     const [selectedTab, setSelectedTab] = useState("attendance");
     const [isForward, setIsForward] = useState(false);
     const [selectedAction, setSelectedAction] = useState(null);
+    const [rejectionRecords, setRejectionRecords] = useState([]);
+
     const [points, setPoints] = useState(
         meetingData.points.map(point => ({
             ...point,
@@ -49,17 +68,48 @@ export default function StartMeet({ handleBack }) {
         }))
     );
 
-    const approvePoint = async (pointId, approvedDecision) => {
+    const setMeetingState = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.get(
+                `http://localhost:5000/api/meetings/get-meeting-status/${meetingData.id}`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                }
+            );
+
+            if (response.data.meeting.status == 'in_progress') {
+                setOnStart(true)
+            }
+        } catch (error) {
+            console.error("Error getting meeting state:", error);
+        }
+    };
+
+    const approvePoint = async (pointId, approvedDecision, point, index) => {
         try {
             const token = localStorage.getItem('token')
             const sentobj = { pointId, approvedDecision }
-            console.log(sentobj)
-            const response = await axios.post('http://localhost:5000/api/meetings/approve-point', sentobj, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
+            console.log(point)
+            if (point.todo || point.old_todo) {
+                const response = await axios.post('http://localhost:5000/api/meetings/approve-point', sentobj, {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    }
+                })
+                console.log(response.data)
+                if (approvedDecision == "APPROVED") {
+                    handleStatusChange(index, "Approve")
                 }
-            })
-            console.log(response.data)
+                else if (approvedDecision == "NOT APPROVED") {
+                    handleStatusChange(index, "Not Approve")
+                }
+            }
+            else {
+                alert('todo is null')
+            }
         }
         catch (err) {
             console.log(err)
@@ -76,6 +126,7 @@ export default function StartMeet({ handleBack }) {
         const updatedPoints = [...points];
         updatedPoints[index].status = newStatus;
         setPoints(updatedPoints);
+        console.log(updatedPoints)
     };
 
     const handleChange = (index, field, value) => {
@@ -84,13 +135,67 @@ export default function StartMeet({ handleBack }) {
         setPoints(updatedPoints);
     };
 
+    const isRejected = (userId) => {
+        if (rejectionRecords) {
+            return rejectionRecords.some(record => record.user_id === userId);
+        }
+        else {
+            return false
+        }
+    };
+
+    async function allPointsApproved() {
+
+        try {
+            var token = localStorage.getItem('token')
+            var id = meetingData.id;
+            const response = await axios.get(`http://localhost:5000/api/meetings/get-meeting-agenda/${meetingData.id}`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                }
+            })
+            var meetingDataPoints = response.data.data
+        }
+        catch (err) {
+            console.log(err)
+        }
+        var flag = 0;
+        for (let i = 0; i < meetingDataPoints.points.length; i++) {
+            console.log(isRejected(meetingDataPoints.points[i].responsible_user.id))
+            if (meetingDataPoints.points[i].status != "APPROVED" && !isRejected(meetingDataPoints.points[i].responsible_user.id)) {
+                flag = 1;
+            }
+        }
+        console.log(flag)
+        if (flag == 0) {
+
+            const response = await axios.post(`http://localhost:5000/api/meetings/start-meeting/`, { meetingId: id }, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                }
+            })
+            console.log(response.data)
+
+            return true
+        }
+        return false
+
+    }
+
+    const getRejectionReason = (userId) => {
+        const record = rejectionRecords.find(r => r.user_id === userId);
+        console.log(record?.reason)
+        return record ? record.reason : '';
+    };
+
+
     useEffect(() => {
+
         console.log(meetingData)
         meetingData.points.forEach((point, index) => {
             var status = point.approved_by_admin;
             console.log("status", status)
-            if (status == "NOT APPROVED")
-            {
+            if (status == "NOT APPROVED") {
                 status = "Not Approve"
             }
             else if (status == "APPROVED") {
@@ -98,9 +203,26 @@ export default function StartMeet({ handleBack }) {
             }
             handleStatusChange(index, status);
         });
-        
+        setMeetingState();
     }, [])
-    
+
+    useEffect(() => {
+        const fetchRejectionRecords = async () => {
+            try {
+                const res = await fetch(`http://localhost:5000/api/meetings/get-rejection-records/${meetingData.id}`);
+                const data = await res.json();
+                console.log("Rejection Records:", data);
+
+                setRejectionRecords(data.data);
+            } catch (err) {
+                console.error('Failed to fetch rejection records:', err);
+            }
+        };
+
+        if (meetingData.id) fetchRejectionRecords();
+    }, [meetingData.id]);
+
+
     return (
         <Box>
             {/* Header Section */}
@@ -148,6 +270,7 @@ export default function StartMeet({ handleBack }) {
                                 gap: "8px",
                                 "&:hover": { backgroundColor: "#5a6268" },
                             }}
+                            onClick={() => {navigate('/editpoints', { state: { meetingData } })}}
                         >
                             <DescriptionOutlinedIcon sx={{ fontSize: "18px" }} />
                             Edit Points
@@ -162,7 +285,15 @@ export default function StartMeet({ handleBack }) {
                                 gap: "8px",
                                 "&:hover": { backgroundColor: "#0069d9" },
                             }}
-                            onClick={() => setOnStart(true)}
+                            onClick={async () => {
+                                const status = await allPointsApproved()
+                                if (status == true) {
+                                    setOnStart(true)
+                                }
+                                else {
+                                    alert("Not all points are approved.")
+                                }
+                            }}
                         >
                             <AutoAwesomeOutlinedIcon sx={{ fontSize: "18px" }} />
                             Start Meeting
@@ -324,7 +455,7 @@ export default function StartMeet({ handleBack }) {
                                             variant="standard"
                                             placeholder="Select Member"
                                             fullWidth
-                                            value={member[1].map((element) => ` ${element.name}`)}
+                                            value={member[1]?.map((element) => ` ${element.name}`)}
                                             InputProps={{ disableUnderline: true }}
                                         />
                                     </TableCell>
@@ -529,105 +660,184 @@ export default function StartMeet({ handleBack }) {
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {points.map((point, index) => (
-                                    <TableRow key={index}>
-                                        <TableCell sx={cellStyle}>{index + 1}</TableCell>
-                                        <TableCell sx={{ ...cellStyle, fontWeight: "normal" }}>
-                                            <TextField
-                                                variant="standard"
-                                                placeholder="Points forward"
-                                                multiline
-                                                fullWidth
-                                                value={point.point_name}
-                                                minRows={1}
-                                                maxRows={4}
-                                                InputProps={{
-                                                    disableUnderline: true,
-                                                    sx: { fontSize: '14px', fontWeight: 'bold' }
-                                                }}
-                                                onChange={(e) => handleChange(index, 'point_name', e.target.value)}
-                                            />
-                                        </TableCell>
-                                        <TableCell sx={cellStyle}>
-                                            <TextField
-                                                variant="standard"
-                                                placeholder="Add remarks"
-                                                fullWidth
-                                                InputProps={{ disableUnderline: true }}
-                                                value={point.todo || point.old_todo || ''}
-                                                onChange={(e) => handleChange(index, 'todo', e.target.value)}
-                                            />
-                                        </TableCell>
-                                        <TableCell sx={cellStyle}>
-                                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                                                <Button
-                                                    variant={point.status === "Approve" ? "contained" : "outlined"}
-                                                    sx={{
-                                                        color: point.status === "Approve" ? "white" : "green",
-                                                        borderColor: "green",
-                                                        backgroundColor: point.status === "Approve" ? "green" : "#e6f8e6",
-                                                        textTransform: "none",
-                                                        borderRadius: "14px",
-                                                        padding: "6px 40px",
-                                                        fontSize: '10px',
-                                                        gap: 0.5,
-                                                        "&:hover": {
-                                                            backgroundColor: point.status === "Approve" ? "darkgreen" : "#d4edda"
-                                                        },
+                                {points.map((point, index) => {
+                                    const isRowDisabled = isRejected(point.responsibleId);
+
+                                    // Common style for disabled elements
+                                    const disabledStyle = isRowDisabled ? {
+                                        opacity: 1.0,
+                                        pointerEvents: 'none',
+                                        backgroundColor: '#f5f5f5'
+                                    } : {};
+
+                                    // Merge with existing cell style
+                                    const mergedCellStyle = {
+                                        ...cellStyle,
+                                        ...(isRowDisabled && { backgroundColor: '#f5f5f5' })
+                                    };
+
+                                    return (
+                                        <TableRow
+                                            key={index}
+                                            sx={isRowDisabled ? { backgroundColor: '#f5f5f5' } : {}}
+                                        >
+                                            <TableCell sx={mergedCellStyle}>{index + 1}</TableCell>
+                                            <TableCell sx={{ ...mergedCellStyle, fontWeight: "normal" }}>
+                                                <TextField
+                                                    variant="standard"
+                                                    placeholder="Points forward"
+                                                    multiline
+                                                    fullWidth
+                                                    value={point.point_name}
+                                                    minRows={1}
+                                                    maxRows={4}
+                                                    disabled={isRowDisabled}
+                                                    InputProps={{
+                                                        disableUnderline: true,
+                                                        sx: {
+                                                            fontSize: '14px',
+                                                            fontWeight: 'bold',
+                                                            ...disabledStyle
+                                                        }
                                                     }}
-                                                    onClick={() => {
-                                                        approvePoint(point.point_id, "APPROVED");
-                                                        handleStatusChange(index, "Approve")
+                                                    onChange={(e) => handleChange(index, 'point_name', e.target.value)}
+                                                />
+                                            </TableCell>
+                                            <TableCell sx={mergedCellStyle}>
+                                                <TextField
+                                                    variant="standard"
+                                                    placeholder="Add remarks"
+                                                    fullWidth
+                                                    disabled={isRowDisabled}
+                                                    InputProps={{
+                                                        disableUnderline: true,
+                                                        sx: disabledStyle
                                                     }}
-                                                >
-                                                    Approve
-                                                </Button>
-                                                <Button
-                                                    variant={point.status === "Not Approve" ? "contained" : "outlined"}
-                                                    sx={{
-                                                        color: point.status === "Not Approve" ? "white" : "red",
-                                                        borderColor: "red",
-                                                        backgroundColor: point.status === "Not Approve" ? "red" : "#fdecec",
-                                                        textTransform: "none",
-                                                        borderRadius: "14px",
-                                                        padding: "6px 30px",
-                                                        fontSize: '10px',
-                                                        gap: 0.5,
-                                                        "&:hover": {
-                                                            backgroundColor: point.status === "Not Approve" ? "darkred" : "#f8d7da"
-                                                        },
+                                                    value={point.todo || point.old_todo || ''}
+                                                    onChange={(e) => handleChange(index, 'todo', e.target.value)}
+                                                />
+                                            </TableCell>
+                                            <TableCell sx={mergedCellStyle}>
+                                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                                                    {(points[index].status == 'Approve' || points[index].status == null) &&
+                                                        <Button
+                                                            variant={point.status === "Approve" ? "contained" : "outlined"}
+                                                            disabled={isRowDisabled}
+                                                            sx={{
+                                                                color: point.status === "Approve" ? "white" : "green",
+                                                                borderColor: "green",
+                                                                backgroundColor: point.status === "Approve" ? "green" : "#e6f8e6",
+                                                                textTransform: "none",
+                                                                borderRadius: "14px",
+                                                                padding: "6px 40px",
+                                                                fontSize: '10px',
+                                                                gap: 0.5,
+                                                                "&:hover": {
+                                                                    backgroundColor: point.status === "Approve" ? "darkgreen" : "#d4edda"
+                                                                },
+                                                                ...(isRowDisabled && {
+                                                                    opacity: 0.6,
+                                                                    pointerEvents: 'none',
+                                                                    backgroundColor: point.status === "Approve" ? "green" : "#e6f8e6",
+                                                                })
+                                                            }}
+                                                            onClick={() => {
+                                                                approvePoint(point.point_id, "APPROVED", point, index);
+                                                            }}
+                                                        >
+                                                            Approve
+                                                        </Button>}
+                                                    {(points[index].status == 'Not Approve' || points[index].status == null) && <Button
+                                                        variant={point.status === "Not Approve" ? "contained" : "outlined"}
+                                                        disabled={isRowDisabled}
+                                                        sx={{
+                                                            color: point.status === "Not Approve" ? "white" : "red",
+                                                            borderColor: "red",
+                                                            backgroundColor: point.status === "Not Approve" ? "red" : "#fdecec",
+                                                            textTransform: "none",
+                                                            borderRadius: "14px",
+                                                            padding: "6px 30px",
+                                                            fontSize: '10px',
+                                                            gap: 0.5,
+                                                            "&:hover": {
+                                                                backgroundColor: point.status === "Not Approve" ? "darkred" : "#f8d7da"
+                                                            },
+                                                            ...(isRowDisabled && {
+                                                                opacity: 0.6,
+                                                                pointerEvents: 'none',
+                                                                backgroundColor: point.status === "Not Approve" ? "red" : "#fdecec",
+                                                            })
+                                                        }}
+                                                        onClick={() => {
+                                                            approvePoint(point.point_id, "NOT APPROVED", point, index);
+                                                        }}
+                                                    >
+                                                        Not Approve
+                                                    </Button>}
+                                                </Box>
+                                            </TableCell>
+                                            <TableCell sx={{ ...mergedCellStyle, p: 1 }}>
+                                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                                                    <TextField
+                                                        variant="standard"
+                                                        placeholder="Select Member"
+                                                        fullWidth
+                                                        disabled={isRowDisabled}
+                                                        InputProps={{
+                                                            disableUnderline: true,
+                                                            sx: isRowDisabled ? disabledStyle : {}
+                                                        }}
+                                                        value={point.responsible}
+                                                        onChange={(e) => handleChange(index, 'responsible', e.target.value)}
+                                                        sx={{
+                                                            px: 1,
+                                                            py: 0.5,
+                                                            borderRadius: 1,
+                                                            bgcolor: isRejected(point.responsibleId) ? '#ffe5e5' : 'transparent',
+                                                            fontWeight: isRejected(point.responsibleId) ? 'bold' : 'normal',
+                                                            color: isRejected(point.responsibleId) ? 'error.main' : 'inherit',
+                                                        }}
+                                                    />
+                                                    {isRejected(point.responsibleId) && (
+                                                        <Typography
+                                                            component="a"
+                                                            onClick={() => handleViewReason(point.responsibleId, point.responsible)}
+                                                            sx={{
+                                                                fontSize: '0.8rem',
+                                                                color: 'error.main',
+                                                                cursor: 'pointer',
+                                                                textDecoration: 'underline',
+                                                                ml: 1
+                                                            }}
+                                                        >
+                                                            View reason
+                                                        </Typography>
+                                                    )}
+                                                </Box>
+                                            </TableCell>
+
+                                            {/* Show reason popup */}
+                                            {selectedReason && (
+                                                <Reason data={selectedReason} onClose={() => setSelectedReason(null)} />
+                                            )}
+
+                                            <TableCell sx={mergedCellStyle}>
+                                                <TextField
+                                                    variant="standard"
+                                                    placeholder="Select Date"
+                                                    fullWidth
+                                                    disabled={isRowDisabled}
+                                                    InputProps={{
+                                                        disableUnderline: true,
+                                                        sx: isRowDisabled ? disabledStyle : {}
                                                     }}
-                                                    onClick={() => {
-                                                        approvePoint(point.point_id, "NOT APPROVED");
-                                                        handleStatusChange(index, "Not Approve")
-                                                    }}
-                                                >
-                                                    Not Approve
-                                                </Button>
-                                            </Box>
-                                        </TableCell>
-                                        <TableCell sx={cellStyle}>
-                                            <TextField
-                                                variant="standard"
-                                                placeholder="Select Member"
-                                                fullWidth
-                                                InputProps={{ disableUnderline: true }}
-                                                value={point.responsible}
-                                                onChange={(e) => handleChange(index, 'responsible', e.target.value)}
-                                            />
-                                        </TableCell>
-                                        <TableCell sx={cellStyle}>
-                                            <TextField
-                                                variant="standard"
-                                                placeholder="Select Date"
-                                                fullWidth
-                                                InputProps={{ disableUnderline: true }}
-                                                value={point.point_deadline}
+                                                    value={format(new Date(point.point_deadline), 'dd MMM yyyy')}
                                                 onChange={(e) => handleChange(index, 'point_deadline', e.target.value)}
-                                            />
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
+                                                />
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })}
                             </TableBody>
                         </Table>
                     </TableContainer>

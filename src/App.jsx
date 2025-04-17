@@ -15,6 +15,7 @@ import Calendar from './components/Calendar';
 import Cmeeting from './components/template1';
 import JoinMeet from './pages/joinmeet';
 import AdminChooser from './components/AdminChooser';
+import EditPoint from './pages/EditPoints';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -58,6 +59,7 @@ function App() {
                   <Route path="/logout" element={<div>Logout</div>} />
                   <Route path="*" element={<Navigate to="/dashboard" replace />} />
                   <Route path='/calendar' element={<Calendar />} />
+                  <Route path='/editpoints' element={<EditPoint />} />
                 </Routes>
               </div>
             </>
