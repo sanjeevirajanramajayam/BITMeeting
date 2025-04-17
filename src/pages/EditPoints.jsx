@@ -42,9 +42,6 @@ export default function EditPoints({ handleBack }) {
 
     const [selectedReason, setSelectedReason] = useState(null);
 
-    // Extract all members from meetingData.members
-
-
     const handleViewReason = (userId, username) => {
         const rejection = rejectionRecords.find((r) => r.user_id === userId);
         if (rejection) {
@@ -68,12 +65,53 @@ export default function EditPoints({ handleBack }) {
     const [selectedAction, setSelectedAction] = useState(null);
     const [rejectionRecords, setRejectionRecords] = useState([]);
 
+
+
     const [points, setPoints] = useState(
         meetingData.points.map(point => ({
             ...point,
             point_status: point.point_status || ""
         }))
     );
+
+    console.log(points)
+
+    const handleChange = (index, field, value) => {
+        setPoints(prevPoints => {
+            const updatedPoints = [...prevPoints];
+            updatedPoints[index] = {
+                ...updatedPoints[index],
+                [field]: value
+            };
+            return updatedPoints;
+        });
+    };
+
+
+    const submitPoints = async () => {
+        const token = localStorage.getItem("token");
+
+        if (!token) {
+            console.error("No auth token found in localStorage");
+            return;
+        }
+
+
+        const promises = points.map((point) =>
+            axios.post("http://localhost:5000/api/meetings/update-point", point, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            })
+        );
+
+        await Promise.all(promises);
+        meetingData.points = points;
+        // Navigate after successful submission
+        navigate("/admin-access", { state: { meetingData } });
+
+    };
+
 
     const setMeetingState = async () => {
         try {
@@ -94,6 +132,10 @@ export default function EditPoints({ handleBack }) {
             console.error("Error getting meeting state:", error);
         }
     };
+
+    useEffect(() => {
+        console.log("Points updated:", points);
+    }, [points]);
 
     const approvePoint = async (pointId, approvedDecision, point, index) => {
         try {
@@ -137,11 +179,11 @@ export default function EditPoints({ handleBack }) {
         }))
     );
 
-    const handleChange = (index, field, value) => {
-        const updatedPoints = [...points];
-        updatedPoints[index][field] = value;
-        setPoints(updatedPoints);
-    };
+    // const handleChange = (index, field, value) => {
+    //     const updatedPoints = [...points];
+    //     updatedPoints[index][field] = value;
+    //     setPoints(updatedPoints);
+    // };
 
     const isRejected = (userId) => {
         if (rejectionRecords) {
@@ -150,6 +192,18 @@ export default function EditPoints({ handleBack }) {
         else {
             return false
         }
+    };
+
+    const getNonRejectedMembers = () => {
+        const rejectedUserIds = rejectionRecords.map(r => r.user_id);
+        return Object.values(meetingData.members)
+            .flatMap(roleMembers =>
+                roleMembers.filter(member => !rejectedUserIds.includes(member.user_id))
+            )
+            .map(member => ({
+                id: member.user_id,
+                name: member.name
+            }));
     };
 
     async function allPointsApproved() {
@@ -251,6 +305,7 @@ export default function EditPoints({ handleBack }) {
                 <Box sx={{ display: "flex", alignItems: "center", gap: 2, padding: "6px", backgroundColor: "white", borderRadius: "8px" }}>
                     <Button
                         variant="contained"
+                        onClick={() => { console.log('clocik'); submitPoints() }}
                         sx={{
                             borderRadius: '5px',
                             backgroundColor: "#6c757d",
@@ -395,25 +450,25 @@ export default function EditPoints({ handleBack }) {
                         </TableHead>
                         <TableBody>
                             {points.map((point, index) => {
-                                const isRowDisabled = isRejected(point.responsibleId);
+                                // const isRowDisabled = isRejected(point.responsibleId);
 
-                                // Common style for disabled elements
-                                const disabledStyle = isRowDisabled ? {
-                                    opacity: 1.0,
-                                    pointerEvents: 'none',
-                                    backgroundColor: '#f5f5f5'
-                                } : {};
+                                // // Common style for disabled elements
+                                // const disabledStyle = isRowDisabled ? {
+                                //     opacity: 1.0,
+                                //     pointerEvents: 'none',
+                                //     backgroundColor: '#f5f5f5'
+                                // } : {};
 
                                 // Merge with existing cell style
                                 const mergedCellStyle = {
                                     ...cellStyle,
-                                    ...(isRowDisabled && { backgroundColor: '#f5f5f5' })
+                                    // ...(isRowDisabled && { backgroundColor: '#f5f5f5' })
                                 };
 
                                 return (
                                     <TableRow
                                         key={index}
-                                        sx={isRowDisabled ? { backgroundColor: '#f5f5f5' } : {}}
+                                        sx={{ backgroundColor: '#f5f5f5' }}
                                     >
                                         <TableCell sx={mergedCellStyle}>{index + 1}</TableCell>
                                         <TableCell sx={{ ...mergedCellStyle, fontWeight: "normal" }}>
@@ -425,13 +480,11 @@ export default function EditPoints({ handleBack }) {
                                                 value={point.point_name}
                                                 minRows={1}
                                                 maxRows={4}
-                                                disabled={isRowDisabled}
                                                 InputProps={{
                                                     disableUnderline: true,
                                                     sx: {
                                                         fontSize: '14px',
                                                         fontWeight: 'bold',
-                                                        ...disabledStyle
                                                     }
                                                 }}
                                                 onChange={(e) => handleChange(index, 'point_name', e.target.value)}
@@ -442,10 +495,8 @@ export default function EditPoints({ handleBack }) {
                                                 variant="standard"
                                                 placeholder="Add remarks"
                                                 fullWidth
-                                                disabled={isRowDisabled}
                                                 InputProps={{
                                                     disableUnderline: true,
-                                                    sx: disabledStyle
                                                 }}
                                                 value={point.todo || point.old_todo || ''}
                                                 onChange={(e) => handleChange(index, 'todo', e.target.value)}
@@ -456,7 +507,6 @@ export default function EditPoints({ handleBack }) {
                                                 {(points[index].status == 'Approve' || points[index].status == null) &&
                                                     <Button
                                                         variant={point.status === "Approve" ? "contained" : "outlined"}
-                                                        disabled={isRowDisabled}
                                                         sx={{
                                                             color: point.status === "Approve" ? "white" : "green",
                                                             borderColor: "green",
@@ -468,12 +518,7 @@ export default function EditPoints({ handleBack }) {
                                                             gap: 0.5,
                                                             "&:hover": {
                                                                 backgroundColor: point.status === "Approve" ? "darkgreen" : "#d4edda"
-                                                            },
-                                                            ...(isRowDisabled && {
-                                                                opacity: 0.6,
-                                                                pointerEvents: 'none',
-                                                                backgroundColor: point.status === "Approve" ? "green" : "#e6f8e6",
-                                                            })
+                                                            }
                                                         }}
                                                         onClick={() => {
                                                             approvePoint(point.point_id, "APPROVED", point, index);
@@ -483,7 +528,6 @@ export default function EditPoints({ handleBack }) {
                                                     </Button>}
                                                 {(points[index].status == 'Not Approve' || points[index].status == null) && <Button
                                                     variant={point.status === "Not Approve" ? "contained" : "outlined"}
-                                                    disabled={isRowDisabled}
                                                     sx={{
                                                         color: point.status === "Not Approve" ? "white" : "red",
                                                         borderColor: "red",
@@ -496,11 +540,6 @@ export default function EditPoints({ handleBack }) {
                                                         "&:hover": {
                                                             backgroundColor: point.status === "Not Approve" ? "darkred" : "#f8d7da"
                                                         },
-                                                        ...(isRowDisabled && {
-                                                            opacity: 0.6,
-                                                            pointerEvents: 'none',
-                                                            backgroundColor: point.status === "Not Approve" ? "red" : "#fdecec",
-                                                        })
                                                     }}
                                                     onClick={() => {
                                                         approvePoint(point.point_id, "NOT APPROVED", point, index);
@@ -514,8 +553,7 @@ export default function EditPoints({ handleBack }) {
                                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                                                 <Autocomplete
                                                     disableClearable
-                                                    disabled={isRowDisabled}
-                                                    options={allMembers}
+                                                    options={getNonRejectedMembers()}
                                                     getOptionLabel={(option) => option.name}
                                                     value={allMembers.find(member => member.id === point.responsibleId) || null}
                                                     onChange={(event, newValue) => {
@@ -533,7 +571,7 @@ export default function EditPoints({ handleBack }) {
                                                             InputProps={{
                                                                 ...params.InputProps,
                                                                 disableUnderline: true,
-                                                                sx: isRowDisabled ? disabledStyle : {}
+                                                                sx: {}
                                                             }}
                                                             sx={{
                                                                 px: 1,
@@ -546,7 +584,7 @@ export default function EditPoints({ handleBack }) {
                                                     sx={{
                                                         minWidth: 200,
                                                         '& .MuiAutocomplete-popupIndicator': {
-                                                            display: isRowDisabled ? 'none' : 'flex'
+                                                            display: 'flex'
                                                         }
                                                     }}
                                                 />
@@ -576,10 +614,11 @@ export default function EditPoints({ handleBack }) {
                                         <TableCell sx={mergedCellStyle}>
                                             <LocalizationProvider dateAdapter={AdapterDayjs}>
                                                 <DatePicker
-                                                    disabled={isRowDisabled}
                                                     value={dayjs(point.point_deadline)}
                                                     onChange={(newValue) => {
-                                                        handleChange(index, 'point_deadline', newValue.toISOString());
+                                                        // Format the date properly before updating state
+                                                        const formattedDate = newValue ? format(newValue.toDate(), 'yyyy-MM-dd') : null;
+                                                        handleChange(index, 'point_deadline', formattedDate);
                                                     }}
                                                     renderInput={(params) => (
                                                         <TextField
@@ -589,7 +628,7 @@ export default function EditPoints({ handleBack }) {
                                                             InputProps={{
                                                                 ...params.InputProps,
                                                                 disableUnderline: true,
-                                                                sx: isRowDisabled ? disabledStyle : {}
+                                                                sx: {}
                                                             }}
                                                         />
                                                     )}

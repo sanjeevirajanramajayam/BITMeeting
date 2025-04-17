@@ -1847,8 +1847,107 @@ const verifyToken = (req, res, next) => {
     }
 };
 
+async function updatePoint(req, res) {
+    var {
+        point_id,
+        point_name,
+        todo,
+        point_status,
+        responsibleId,
+        point_deadline,
+        approved_by_admin,
+        old_todo,
+        meetingId
+    } = req.body;
+
+    point_deadline = new Date(point_deadline).toISOString().slice(0, 19).replace('T', ' ');
+
+    const accessUserId = req.user.userId;
+
+    const [
+        [createdUserId]
+    ] = await db.query(
+        `SELECT created_by FROM meeting WHERE id = ?`,
+        [meetingId]
+    );
+
+    // if (createdUserId.created_by !== accessUserId) {
+    //     return res.status(403).json({
+    //         success: false,
+    //         message: `Authorization is required`
+    //     });
+    // }
+
+    // Convert frontend status to database enum
+    const dbApprovalStatus =
+        approved_by_admin === "Approve" ?
+        "APPROVED" :
+        approved_by_admin === "Not Approve" ?
+        "NOT APPROVED" :
+        undefined;
+
+    const fields = [];
+    const values = [];
+
+    if (point_name !== undefined) {
+        fields.push("point_name = ?");
+        values.push(point_name);
+    }
+
+    if (todo !== undefined) {
+        fields.push("todo = ?");
+        values.push(todo);
+    }
+
+    if (point_status !== undefined) {
+        fields.push("point_status = ?");
+        values.push(point_status);
+    }
+
+    if (responsibleId !== undefined) {
+        fields.push("point_responsibility = ?");
+        values.push(responsibleId);
+    }
+
+    if (point_deadline !== undefined) {
+        fields.push("point_deadline = ?");
+        values.push(point_deadline);
+    }
+
+    if (dbApprovalStatus !== undefined) {
+        fields.push("approved_by_admin = ?");
+        values.push(dbApprovalStatus);
+    }
+
+    if (old_todo !== undefined) {
+        fields.push("old_todo = ?");
+        values.push(old_todo);
+    }
+
+    if (fields.length === 0) {
+        return res.status(400).json({
+            success: false,
+            message: "No valid fields provided to update"
+        });
+    }
+
+    values.push(point_id); // For WHERE clause
+
+    const query = `UPDATE meeting_points SET ${fields.join(", ")} WHERE id = ?`;
+
+    await db.query(query, values);
+
+    return res.status(200).json({
+        success: true,
+        message: "Meeting point updated successfully"
+    });
+}
+
+
 const getMeetingStatus = async (req, res) => {
-    const { meetingId } = req.params;
+    const {
+        meetingId
+    } = req.params;
 
     if (!meetingId) {
         return res.status(400).json({
@@ -1858,7 +1957,9 @@ const getMeetingStatus = async (req, res) => {
     }
 
     try {
-        const [[meeting]] = await db.query(
+        const [
+            [meeting]
+        ] = await db.query(
             `SELECT id, meeting_name, meeting_status, start_time, end_time, created_by
              FROM meeting
              WHERE id = ?`,
@@ -1919,5 +2020,6 @@ module.exports = {
     getPoints,
     respondToMeetingInvite,
     getUserMeetingResponse,
-    getMeetingStatus
+    getMeetingStatus,
+    updatePoint
 }

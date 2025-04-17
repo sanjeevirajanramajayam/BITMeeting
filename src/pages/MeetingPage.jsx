@@ -11,12 +11,10 @@ import ForwardingForm from "./MeetingPage2";
 import image from "../assets/bannariammanheader.png";
 import { useNavigate } from "react-router-dom";
 import { useLocation } from 'react-router-dom';
-import InfoIcon from '@mui/icons-material/Info';
 import axios, { all } from "axios";
 import Reason from "../components/ViewReason";
 import { format } from "date-fns";
 
-// Table cell styles
 const cellStyle = {
     border: "1px solid #ddd",
     padding: "12px",
@@ -191,10 +189,8 @@ export default function StartMeet({ handleBack }) {
 
     useEffect(() => {
 
-        console.log(meetingData)
         meetingData.points.forEach((point, index) => {
             var status = point.approved_by_admin;
-            console.log("status", status)
             if (status == "NOT APPROVED") {
                 status = "Not Approve"
             }
