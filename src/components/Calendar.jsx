@@ -4,7 +4,9 @@ import { ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import EventCard from '../components/EventCard.jsx';
 import axios from 'axios';
 import dayjs from 'dayjs';
-import '../styles/Calendar.css';  
+import '../styles/Calendar.css';
+import { formatInTimeZone } from 'date-fns-tz';
+import { differenceInMinutes, parseISO } from 'date-fns';
 
 // These are the colors defined in the CSS
 const AVAILABLE_COLORS = ['blue', 'green', 'purple', 'orange'];
@@ -15,13 +17,13 @@ const Calendar = ({ initialDate = new Date() }) => {
   const [viewDropdownOpen, setViewDropdownOpen] = useState(false);
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
-  
+
   // Get month name and year
   const monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
-  
+
   const monthName = monthNames[currentDate.getMonth()];
   const year = currentDate.getFullYear();
 
@@ -41,7 +43,7 @@ const Calendar = ({ initialDate = new Date() }) => {
       setCurrentDate(new Date(currentDate.getFullYear() - 1, 0, 1));
     }
   };
-  
+
   const goToNext = () => {
     if (currentView === 'month') {
       setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
@@ -57,7 +59,7 @@ const Calendar = ({ initialDate = new Date() }) => {
       setCurrentDate(new Date(currentDate.getFullYear() + 1, 0, 1));
     }
   };
-  
+
   const goToToday = () => {
     setCurrentDate(new Date());
   };
@@ -95,35 +97,41 @@ const Calendar = ({ initialDate = new Date() }) => {
 
       if (response.data.success) {
         let formattedMeetings = [];
-        
+
+        console.log(response.data.meetings)
+
         // First sort meetings by start time to process them sequentially
-        const sortedMeetings = [...response.data.meetings].sort((a, b) => 
+        const sortedMeetings = [...response.data.meetings].sort((a, b) =>
           new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
         );
-        
+
         // Color cycling logic - use a global index to track used colors
         let colorIndex = 0;
-        
+
         // Process each meeting
         sortedMeetings.forEach(meeting => {
           // Assign next color in the cycle
           const color = AVAILABLE_COLORS[colorIndex % AVAILABLE_COLORS.length];
-          
+
           // Move to next color for the next meeting
           colorIndex++;
-          
+          console.log(sortedMeetings)
+
           const formattedMeeting = {
             id: meeting.id,
             type: `Info: ${meeting.role}`,
             title: meeting.meeting_name,
-            start: meeting.start_time,
-            end: meeting.end_time,
-            date: dayjs(meeting.start_time).format("dddd, D MMMM, YYYY"),
-            duration: dayjs(meeting.end_time).diff(dayjs(meeting.start_time), 'minute') + " min",
+            start: formatInTimeZone(meeting.start_time, 'UTC', 'yyyy-MM-dd HH:mm:ss'),
+            end: formatInTimeZone(meeting.end_time, 'UTC', 'yyyy-MM-dd HH:mm:ss'),
+            date: formatInTimeZone(meeting.start_time, 'UTC', 'EEEE, d MMMM, yyyy'),
+            duration: `${differenceInMinutes(
+              parseISO(meeting.end_time),
+              parseISO(meeting.start_time)
+            )} min`,
             location: meeting.venue_name,
             description: meeting.meeting_description || "No description available",
             host: `${meeting.created_by}`,
-            priority: meeting.priority.toUpperCase()+" PRIORITY",
+            priority: meeting.priority.toUpperCase() + " PRIORITY",
             deadline: meeting.meeting_status === "not_started" ? "Upcoming" : null,
             progress: meeting.meeting_status === "in_progress" ? "40%" : null,
             repeat_type: meeting.repeat_type.toUpperCase(),
@@ -132,7 +140,7 @@ const Calendar = ({ initialDate = new Date() }) => {
             host_name: meeting.created_by,
             color: color // Assign color from the cycle
           };
-          
+
           formattedMeetings.push(formattedMeeting);
         });
 
@@ -154,16 +162,16 @@ const Calendar = ({ initialDate = new Date() }) => {
   const generateMonthDays = () => {
     const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
     const lastDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
-    
+
     const startingDayOfWeek = firstDayOfMonth.getDay();
     const daysInMonth = lastDayOfMonth.getDate();
-    
+
     // Previous month days to show
     const prevMonthDays = [];
     if (startingDayOfWeek > 0) {
       const prevMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 0);
       const prevMonthDaysCount = prevMonth.getDate();
-      
+
       for (let i = prevMonthDaysCount - startingDayOfWeek + 1; i <= prevMonthDaysCount; i++) {
         prevMonthDays.push({
           day: i,
@@ -172,7 +180,7 @@ const Calendar = ({ initialDate = new Date() }) => {
         });
       }
     }
-    
+
     // Current month days
     const currentMonthDays = [];
     for (let i = 1; i <= daysInMonth; i++) {
@@ -182,12 +190,12 @@ const Calendar = ({ initialDate = new Date() }) => {
         date: new Date(currentDate.getFullYear(), currentDate.getMonth(), i)
       });
     }
-    
+
     // Next month days to fill the grid
     const nextMonthDays = [];
     const totalDaysShown = prevMonthDays.length + currentMonthDays.length;
     const remainingDays = 42 - totalDaysShown; // 6 rows of 7 days
-    
+
     for (let i = 1; i <= remainingDays; i++) {
       nextMonthDays.push({
         day: i,
@@ -195,10 +203,10 @@ const Calendar = ({ initialDate = new Date() }) => {
         date: new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, i)
       });
     }
-    
+
     return [...prevMonthDays, ...currentMonthDays, ...nextMonthDays];
   };
-  
+
   // Get events for a specific day
   const getEventsForDay = (date) => {
     return events.filter(event => {
@@ -210,7 +218,7 @@ const Calendar = ({ initialDate = new Date() }) => {
       );
     });
   };
-  
+
   // Check if a date is today
   const isToday = (date) => {
     const today = new Date();
@@ -220,23 +228,23 @@ const Calendar = ({ initialDate = new Date() }) => {
       date.getFullYear() === today.getFullYear()
     );
   };
-  
+
   // Generate week days
   const generateWeekDays = () => {
     const startOfWeek = new Date(currentDate);
     const day = startOfWeek.getDay();
     startOfWeek.setDate(startOfWeek.getDate() - day);
-    
+
     const weekDays = [];
     for (let i = 0; i < 7; i++) {
       const date = new Date(startOfWeek);
       date.setDate(date.getDate() + i);
       weekDays.push(date);
     }
-    
+
     return weekDays;
   };
-  
+
   // Generate time slots
   const generateTimeSlots = () => {
     const timeSlots = [];
@@ -259,24 +267,24 @@ const Calendar = ({ initialDate = new Date() }) => {
       );
     });
   };
-  
+
   // Generate months for year view
   const generateMonthsForYear = () => {
     const months = [];
     for (let i = 0; i < 12; i++) {
       const firstDayOfMonth = new Date(currentDate.getFullYear(), i, 1);
       const lastDayOfMonth = new Date(currentDate.getFullYear(), i + 1, 0);
-      
+
       const daysInMonth = lastDayOfMonth.getDate();
       const startingDayOfWeek = firstDayOfMonth.getDay();
-      
+
       const monthDays = [];
-      
+
       // Add empty slots for days before the 1st of the month
       for (let j = 0; j < startingDayOfWeek; j++) {
         monthDays.push({ day: null, month: 'prev' });
       }
-      
+
       // Add days of the month
       for (let j = 1; j <= daysInMonth; j++) {
         const date = new Date(currentDate.getFullYear(), i, j);
@@ -288,16 +296,16 @@ const Calendar = ({ initialDate = new Date() }) => {
           hasEvents: getEventsForDay(date).length > 0
         });
       }
-      
+
       months.push({
         name: monthNames[i],
         days: monthDays
       });
     }
-    
+
     return months;
   };
-  
+
   // Render month view
   const renderMonthView = () => {
     if (loading) {
@@ -305,7 +313,7 @@ const Calendar = ({ initialDate = new Date() }) => {
     }
 
     const days = generateMonthDays();
-    
+
     return (
       <div>
         <div className="weekdays">
@@ -317,10 +325,10 @@ const Calendar = ({ initialDate = new Date() }) => {
           {days.map((day, index) => {
             const dayEvents = getEventsForDay(day.date);
             const isCurrentDay = isToday(day.date);
-            
+
             return (
-              <div 
-                key={index} 
+              <div
+                key={index}
                 className={`day-cell ${day.month !== 'current' ? 'different-month' : ''} ${isCurrentDay ? 'today' : ''}`}
                 onClick={() => handleDayClick(day.date)}
               >
@@ -329,9 +337,9 @@ const Calendar = ({ initialDate = new Date() }) => {
                 </div>
                 <div className="events">
                   {dayEvents.slice(0, 2).map((event, eventIndex) => (
-                    <EventCard 
-                      key={eventIndex} 
-                      event={event} 
+                    <EventCard
+                      key={eventIndex}
+                      event={event}
                       index={eventIndex}
                       onClick={() => handleEventClick(event)}
                     />
@@ -352,7 +360,7 @@ const Calendar = ({ initialDate = new Date() }) => {
       </div>
     );
   };
-  
+
   // Render week view
   const renderWeekView = () => {
     if (loading) {
@@ -361,7 +369,7 @@ const Calendar = ({ initialDate = new Date() }) => {
 
     const weekDays = generateWeekDays();
     const timeSlots = generateTimeSlots();
-    
+
     return (
       <div>
         <div className="week-header">
@@ -370,10 +378,10 @@ const Calendar = ({ initialDate = new Date() }) => {
             {weekDays.map((date, index) => {
               const day = date.getDate();
               const isCurrentDay = isToday(date);
-              
+
               return (
-                <div 
-                  key={index} 
+                <div
+                  key={index}
                   className="day-header"
                   onClick={() => handleDayClick(date)}
                 >
@@ -402,17 +410,17 @@ const Calendar = ({ initialDate = new Date() }) => {
                 {timeSlots.map((_, timeIndex) => {
                   const eventsAtTime = getEventsForTimeSlot(date, timeIndex);
                   const hasMultipleEvents = eventsAtTime.length > 1;
-                  
+
                   return (
-                    <div 
-                      key={timeIndex} 
+                    <div
+                      key={timeIndex}
                       className={`week-cell ${hasMultipleEvents ? 'multiple-events' : ''}`}
                       onClick={() => handleDayClick(date)}
                     >
                       {eventsAtTime.map((event, eventIndex) => (
-                        <EventCard 
-                          key={eventIndex} 
-                          event={event} 
+                        <EventCard
+                          key={eventIndex}
+                          event={event}
                           index={eventIndex}
                           style={{
                             width: hasMultipleEvents ? `${100 / eventsAtTime.length}%` : '100%',
@@ -434,7 +442,7 @@ const Calendar = ({ initialDate = new Date() }) => {
       </div>
     );
   };
-  
+
   // Render day view
   const renderDayView = () => {
     if (loading) {
@@ -443,7 +451,7 @@ const Calendar = ({ initialDate = new Date() }) => {
 
     const timeSlots = generateTimeSlots();
     const dayEvents = getEventsForDay(currentDate);
-    
+
     return (
       <div>
         <div className="day-header">
@@ -466,16 +474,16 @@ const Calendar = ({ initialDate = new Date() }) => {
             {timeSlots.map((_, timeIndex) => {
               const eventsAtTime = getEventsForTimeSlot(currentDate, timeIndex);
               const hasMultipleEvents = eventsAtTime.length > 1;
-              
+
               return (
-                <div 
-                  key={timeIndex} 
+                <div
+                  key={timeIndex}
                   className={`day-cell ${hasMultipleEvents ? 'multiple-events' : ''}`}
                 >
                   {eventsAtTime.map((event, eventIndex) => (
-                    <EventCard 
-                      key={eventIndex} 
-                      event={event} 
+                    <EventCard
+                      key={eventIndex}
+                      event={event}
                       index={eventIndex}
                       style={{
                         width: hasMultipleEvents ? `${100 / eventsAtTime.length}%` : '100%',
@@ -492,7 +500,7 @@ const Calendar = ({ initialDate = new Date() }) => {
       </div>
     );
   };
-  
+
   // Render year view
   const renderYearView = () => {
     if (loading) {
@@ -500,12 +508,12 @@ const Calendar = ({ initialDate = new Date() }) => {
     }
 
     const months = generateMonthsForYear();
-    
+
     return (
       <div className="year-view">
         {months.map((month, monthIndex) => (
-          <div 
-            key={monthIndex} 
+          <div
+            key={monthIndex}
             className="month-card"
             onClick={() => handleMonthClick(monthIndex)}
           >
@@ -517,8 +525,8 @@ const Calendar = ({ initialDate = new Date() }) => {
             </div>
             <div className="month-grid">
               {month.days.map((day, dayIndex) => (
-                <div 
-                  key={dayIndex} 
+                <div
+                  key={dayIndex}
                   className={`month-day ${day.month !== 'current' ? 'different-month' : ''} ${day.isToday ? 'today' : ''} ${day.hasEvents ? 'has-events' : ''}`}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -534,7 +542,7 @@ const Calendar = ({ initialDate = new Date() }) => {
       </div>
     );
   };
-  
+
   // Render view selector
   const renderViewSelector = () => {
     const viewOptions = {
@@ -543,27 +551,27 @@ const Calendar = ({ initialDate = new Date() }) => {
       day: 'Day',
       year: 'Year'
     };
-    
+
     const handleViewChange = (view) => {
       setCurrentView(view);
       setViewDropdownOpen(false);
     };
-    
+
     return (
       <div className="view-selector">
-        <button 
+        <button
           className="view-button"
           onClick={() => setViewDropdownOpen(!viewDropdownOpen)}
         >
           {viewOptions[currentView]}
           <ChevronDown size={16} />
         </button>
-        
+
         {viewDropdownOpen && (
           <div className="view-dropdown">
             {Object.entries(viewOptions).map(([key, label]) => (
-              <div 
-                key={key} 
+              <div
+                key={key}
                 className={`view-option ${key === currentView ? 'active' : ''}`}
                 onClick={() => handleViewChange(key)}
               >
@@ -575,7 +583,7 @@ const Calendar = ({ initialDate = new Date() }) => {
       </div>
     );
   };
-  
+
   return (
     <div className="calendar-container">
       <div className="calendar-header">

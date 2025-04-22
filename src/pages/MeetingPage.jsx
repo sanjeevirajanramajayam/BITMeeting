@@ -35,6 +35,7 @@ const headerStyle = {
 export default function StartMeet({ handleBack }) {
 
     const [selectedReason, setSelectedReason] = useState(null);
+    const [attendanceRecords, setAttendanceRecords] = useState([]);
 
     const handleViewReason = (userId, username) => {
         const rejection = rejectionRecords.find((r) => r.user_id === userId);
@@ -49,6 +50,7 @@ export default function StartMeet({ handleBack }) {
 
     const location = useLocation();
     const { meetingData } = location.state || {};
+    console.log(meetingData)
     const navigate = useNavigate();
 
     // State management
@@ -58,6 +60,8 @@ export default function StartMeet({ handleBack }) {
     const [isForward, setIsForward] = useState(false);
     const [selectedAction, setSelectedAction] = useState(null);
     const [rejectionRecords, setRejectionRecords] = useState([]);
+    const [selectedPoint, setSelectedPoint] = useState(null);
+    const [meetingAgenda, setMeetingAgenda] = useState([]);
 
     const [points, setPoints] = useState(
         meetingData.points.map(point => ({
@@ -65,6 +69,99 @@ export default function StartMeet({ handleBack }) {
             point_status: point.point_status || ""
         }))
     );
+
+    useEffect(() => {
+        const fetchAttendanceData = async () => {
+            try {
+                const response = await axios.get(
+                    `http://localhost:5000/api/meetings/get-attendance-records/${meetingData.id}`
+                );
+                setAttendanceRecords(response.data.data);
+            } catch (err) {
+                console.error(err)
+                // Initialize with all members as absent if API fails
+                const allMembers = Object.values(meetingData.members).flat();
+                setAttendanceRecords(allMembers.map(member => ({
+                    name: member.name,
+                    attendance_status: 'absent',
+                })));
+            }
+        };
+
+        fetchAttendanceData();
+        const token = localStorage.getItem('token')
+        const fetchAgenda = async () => {
+            try {
+                const response = await axios.get(
+                    `http://localhost:5000/api/meetings/get-meeting-agenda/${meetingData.id}`
+                    , {
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                        }
+                    });
+                setMeetingAgenda(response.data.data.points);
+                console.log(response.data.data)
+            } catch (err) {
+                console.error(err)
+                // Initialize with all members as absent if API fails
+                // const allMembers = Object.values(meetingData.members).flat();
+                // setAttendanceRecords(allMembers.map(member => ({
+                //     name: member.name,
+                //     attendance_status: 'absent',
+                // })));
+            }
+        };
+
+        fetchAgenda();
+    }, [meetingData.id]);
+
+    const getMemberStatus = (name) => {
+        const record = attendanceRecords ? attendanceRecords.find(r => r.name === name) : [];
+        return record ? record.attendance_status : 'absent'; // default to absent if not found
+    };
+
+    const handleChangeStatus = (index, newStatus) => {
+        const updatedPoints = [...points];
+        updatedPoints[index].DecisionStatus = newStatus;
+        setPoints(updatedPoints);
+    };
+
+
+    const handleAttendanceChange = (name, newStatus) => {
+        setAttendanceRecords(prevRecords =>
+            prevRecords.map(record =>
+                record.name === name ? { ...record, attendance_status: newStatus } : record
+            )
+        );
+    };
+
+    const markAttendance = async (userId, status) => {
+        const token = localStorage.getItem('token');
+        console.log(userId)
+        console.log(attendanceRecords)
+        try {
+            await axios.post('http://localhost:5000/api/meetings/mark-attendence', {
+                meetingId: meetingData.id,
+                userId,
+                status
+            }, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                }
+            });
+
+            // Update local state
+
+
+            setAttendanceRecords(prevRecords =>
+                prevRecords.map(record =>
+                    record.userId === userId ? { ...record, attendance_status: status } : record
+                )
+            );
+        } catch (err) {
+            console.error('Failed to update attendance:', err.response?.data?.message || err.message);
+        }
+    };
 
     const setMeetingState = async () => {
         try {
@@ -90,14 +187,12 @@ export default function StartMeet({ handleBack }) {
         try {
             const token = localStorage.getItem('token')
             const sentobj = { pointId, approvedDecision }
-            console.log(point)
             if (point.todo || point.old_todo) {
                 const response = await axios.post('http://localhost:5000/api/meetings/approve-point', sentobj, {
                     headers: {
                         Authorization: `Bearer ${token}`,
                     }
                 })
-                console.log(response.data)
                 if (approvedDecision == "APPROVED") {
                     handleStatusChange(index, "Approve")
                 }
@@ -110,7 +205,7 @@ export default function StartMeet({ handleBack }) {
             }
         }
         catch (err) {
-            console.log(err)
+            console.error(err)
         }
     }
 
@@ -124,12 +219,12 @@ export default function StartMeet({ handleBack }) {
         const updatedPoints = [...points];
         updatedPoints[index].status = newStatus;
         setPoints(updatedPoints);
-        console.log(updatedPoints)
     };
 
     const handleChange = (index, field, value) => {
         const updatedPoints = [...points];
         updatedPoints[index][field] = value;
+        console.log(updatedPoints)
         setPoints(updatedPoints);
     };
 
@@ -159,12 +254,10 @@ export default function StartMeet({ handleBack }) {
         }
         var flag = 0;
         for (let i = 0; i < meetingDataPoints.points.length; i++) {
-            console.log(isRejected(meetingDataPoints.points[i].responsible_user.id))
             if (meetingDataPoints.points[i].status != "APPROVED" && !isRejected(meetingDataPoints.points[i].responsible_user.id)) {
                 flag = 1;
             }
         }
-        console.log(flag)
         if (flag == 0) {
 
             const response = await axios.post(`http://localhost:5000/api/meetings/start-meeting/`, { meetingId: id }, {
@@ -172,7 +265,6 @@ export default function StartMeet({ handleBack }) {
                     Authorization: `Bearer ${token}`,
                 }
             })
-            console.log(response.data)
 
             return true
         }
@@ -182,10 +274,32 @@ export default function StartMeet({ handleBack }) {
 
     const getRejectionReason = (userId) => {
         const record = rejectionRecords.find(r => r.user_id === userId);
-        console.log(record?.reason)
         return record ? record.reason : '';
     };
 
+    const EndMeeting = async () => {
+        const allHaveForwardType = meetingAgenda.every(
+            point => point.forward_info && typeof point.forward_info.type !== "undefined"
+        );
+        const allHaveDecisionStatus = points.every(p => p.DecisionStatus !== undefined);
+        console.log(meetingAgenda)
+        var id = meetingData.id;
+        console.log(allHaveForwardType)
+        var token = localStorage.getItem('token')
+        if (allHaveForwardType || allHaveDecisionStatus) {
+
+
+            const response = await axios.post(`http://localhost:5000/api/meetings/end-meeting/`, { meetingId: id }, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                }
+            })
+            //navigate(`/reports/${meetingData.id}`)
+        }
+        else {
+            alert('Fill in all points!')
+        }
+    }
 
     useEffect(() => {
 
@@ -207,7 +321,6 @@ export default function StartMeet({ handleBack }) {
             try {
                 const res = await fetch(`http://localhost:5000/api/meetings/get-rejection-records/${meetingData.id}`);
                 const data = await res.json();
-                console.log("Rejection Records:", data);
 
                 setRejectionRecords(data.data);
             } catch (err) {
@@ -216,9 +329,23 @@ export default function StartMeet({ handleBack }) {
         };
 
         if (meetingData.id) fetchRejectionRecords();
+
+
     }, [meetingData.id]);
 
+    useEffect(() => {
+        meetingAgenda.forEach((point, index) => {
+            console.log(point)
+            if (point.forward_info) {
+                console.log(`Decision for point at index ${index}:`, point.forward_info.decision);
+                handleChangeStatus(index, point.forward_info.decision);
+            }
+        });
+    }, [meetingAgenda])
 
+
+
+    console.log(points)
     return (
         <Box>
             {/* Header Section */}
@@ -266,7 +393,7 @@ export default function StartMeet({ handleBack }) {
                                 gap: "8px",
                                 "&:hover": { backgroundColor: "#5a6268" },
                             }}
-                            onClick={() => {navigate('/editpoints', { state: { meetingData } })}}
+                            onClick={() => { navigate('/editpoints', { state: { meetingData } }) }}
                         >
                             <DescriptionOutlinedIcon sx={{ fontSize: "18px" }} />
                             Edit Points
@@ -300,7 +427,7 @@ export default function StartMeet({ handleBack }) {
                         <Button
                             variant="contained"
                             sx={{ width: '250px', backgroundColor: "#FFB547", textTransform: "none", gap: "5px" }}
-                            onClick={() => navigate("/dashboardrightpanel")}
+                            onClick={() => { EndMeeting() }}
                         >
                             <AutoAwesomeOutlinedIcon sx={{ fontSize: "18px" }} />
                             End Meeting
@@ -423,7 +550,7 @@ export default function StartMeet({ handleBack }) {
                                 <TableCell sx={cellStyle}>
                                     <TextField
                                         variant="standard"
-                                        value={meetingData?.date || ""}
+                                        value={meetingData?.dateText || ""}
                                         fullWidth
                                         InputProps={{ disableUnderline: true }}
                                     />
@@ -474,53 +601,63 @@ export default function StartMeet({ handleBack }) {
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                <TableRow>
-                                    <TableCell sx={{ ...cellStyle, textAlign: "center" }}>1</TableCell>
-                                    <TableCell sx={{ ...cellStyle, textAlign: "center" }}>John Doe (Manager)</TableCell>
-                                    <TableCell sx={{ ...cellStyle, textAlign: "center" }}>Chairperson</TableCell>
-                                    <TableCell sx={{ ...cellStyle, textAlign: "center" }}>
-                                        <Box sx={{ display: 'flex', justifyContent: 'center', gap: 0.5 }}>
-                                            <Button
-                                                variant={status === "Present" ? "contained" : "outlined"}
-                                                sx={{
-                                                    width: '100px',
-                                                    color: status === "Present" ? "white" : "green",
-                                                    borderColor: "green",
-                                                    backgroundColor: status === "Present" ? "green" : "#e6f8e6",
-                                                    textTransform: "none",
-                                                    borderRadius: "14px",
-                                                    fontSize: '10px',
-                                                    gap: 0.5,
-                                                    "&:hover": {
-                                                        backgroundColor: status === "Present" ? "darkgreen" : "#d4edda",
-                                                    },
-                                                }}
-                                                onClick={() => setStatus("Present")}
-                                            >
-                                                Present
-                                            </Button>
-                                            <Button
-                                                variant={status === "Absent" ? "contained" : "outlined"}
-                                                sx={{
-                                                    width: '100px',
-                                                    color: status === "Absent" ? "white" : "red",
-                                                    borderColor: "red",
-                                                    backgroundColor: status === "Absent" ? "red" : "#fdecec",
-                                                    textTransform: "none",
-                                                    borderRadius: "14px",
-                                                    fontSize: '10px',
-                                                    gap: 0.5,
-                                                    "&:hover": {
-                                                        backgroundColor: status === "Absent" ? "darkred" : "#f8d7da",
-                                                    },
-                                                }}
-                                                onClick={() => setStatus("Absent")}
-                                            >
-                                                Absent
-                                            </Button>
-                                        </Box>
-                                    </TableCell>
-                                </TableRow>
+
+                                {Object.entries(meetingData.members).map(([role, members]) =>
+                                    members.map((member, index) => {
+                                        const currentStatus = getMemberStatus(member.name);
+                                        return (
+                                            <TableRow key={`${role}-${index}`}>
+                                                <TableCell sx={{ textAlign: "center" }}>{index + 1}</TableCell>
+                                                <TableCell sx={{ textAlign: "center" }}>{member.name}</TableCell>
+                                                <TableCell sx={{ textAlign: "center" }}>{role}</TableCell>
+                                                <TableCell sx={{ textAlign: "center" }}>
+                                                    <Box sx={{ display: 'flex', justifyContent: 'center', gap: 0.5 }}>
+                                                        <Button
+                                                            variant={currentStatus === "present" ? "contained" : "outlined"}
+                                                            sx={{
+                                                                width: '100px',
+                                                                color: currentStatus === "present" ? "white" : "green",
+                                                                borderColor: "green",
+                                                                backgroundColor: currentStatus === "present" ? "green" : "#e6f8e6",
+                                                                textTransform: "none",
+                                                                borderRadius: "14px",
+                                                                fontSize: '10px',
+                                                                gap: 0.5,
+                                                                "&:hover": {
+                                                                    backgroundColor: currentStatus === "present" ? "darkgreen" : "#d4edda",
+                                                                },
+                                                            }}
+                                                            onClick={() => markAttendance(member.user_id, "present")}
+
+                                                        >
+                                                            Present
+                                                        </Button>
+                                                        <Button
+                                                            variant={currentStatus === "absent" ? "contained" : "outlined"}
+                                                            sx={{
+                                                                width: '100px',
+                                                                color: currentStatus === "absent" ? "white" : "red",
+                                                                borderColor: "red",
+                                                                backgroundColor: currentStatus === "absent" ? "red" : "#fdecec",
+                                                                textTransform: "none",
+                                                                borderRadius: "14px",
+                                                                fontSize: '10px',
+                                                                gap: 0.5,
+                                                                "&:hover": {
+                                                                    backgroundColor: currentStatus === "absent" ? "darkred" : "#f8d7da",
+                                                                },
+                                                            }}
+                                                            onClick={() => markAttendance(member.user_id, "absent")}
+
+                                                        >
+                                                            Absent
+                                                        </Button>
+                                                    </Box>
+                                                </TableCell>
+                                            </TableRow>
+                                        );
+                                    })
+                                )}
                             </TableBody>
                         </Table>
                     </TableContainer>
@@ -538,107 +675,199 @@ export default function StartMeet({ handleBack }) {
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {points.map((point, index) => (
-                                    <TableRow key={index}>
-                                        <TableCell sx={{ ...cellStyle, textAlign: "center" }}>{index + 1}</TableCell>
-                                        <TableCell sx={{ ...cellStyle, fontWeight: "normal", maxWidth: "300px" }}>
-                                            <TextField
-                                                variant="standard"
-                                                placeholder="Enter discussion topic"
-                                                multiline
-                                                fullWidth
-                                                minRows={1}
-                                                maxRows={4}
-                                                value={point.point_name}
-                                                InputProps={{
-                                                    disableUnderline: true,
-                                                    sx: { fontSize: '14px', fontWeight: 'bold' }
-                                                }}
-                                                onChange={(e) => handleChange(index, 'point_name', e.target.value)}
-                                            />
-                                        </TableCell>
-                                        <TableCell sx={cellStyle}>
-                                            <TextField
-                                                variant="standard"
-                                                placeholder="Add remarks"
-                                                fullWidth
-                                                value={point.remarks}
-                                                onChange={(e) => handleChange(index, 'remarks', e.target.value)}
-                                                InputProps={{ disableUnderline: true }}
-                                            />
-                                        </TableCell>
+                                {points.map((point, index) => {
 
-                                        <TableCell sx={{ ...cellStyle, textAlign: "center" }}>
-                                            <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 1 }}>
-                                                <Button
-                                                    variant={point.approved_by_admin === "APPROVED" ? "contained" : "outlined"}
-                                                    sx={{
-                                                        color: point.approved_by_admin === "APPROVED" ? "white" : "green",
-                                                        borderColor: "green",
-                                                        backgroundColor: point.approved_by_admin === "APPROVED" ? "green" : "#e6f8e6",
-                                                        textTransform: "none",
-                                                        borderRadius: "14px",
-                                                        padding: "6px 40px",
-                                                        fontSize: '10px',
-                                                        gap: 0.5,
-                                                        "&:hover": {
-                                                            backgroundColor: point.approved_by_admin === "APPROVED" ? "darkgreen" : "#d4edda",
-                                                        },
-                                                    }}
-                                                    onClick={() => {
-                                                        approvePoint(point.point_id, "APPROVED");
-                                                        handleStatusChange(index, "Approve")
-                                                    }}
-                                                >
-                                                    Approve
-                                                </Button>
-                                                <Button
-                                                    variant={point.approved_by_admin === "NOT APPROVED" ? "contained" : "outlined"}
-                                                    sx={{
-                                                        color: point.approved_by_admin === "NOT APPROVED" ? "white" : "red",
-                                                        borderColor: "red",
-                                                        backgroundColor: point.approved_by_admin === "NOT APPROVED" ? "red" : "#fdecec",
-                                                        textTransform: "none",
-                                                        borderRadius: "14px",
-                                                        padding: "6px 30px",
-                                                        fontSize: '10px',
-                                                        gap: 0.5,
-                                                        "&:hover": {
-                                                            backgroundColor: point.approved_by_admin === "NOT APPROVED" ? "darkred" : "#f8d7da",
-                                                        },
-                                                    }}
-                                                    onClick={() => {
-                                                        approvePoint(point.point_id, "NOT APPROVED");
-                                                        handleStatusChange(index, "NotApprove")
-                                                    }}
-                                                >
-                                                    Not Approve
-                                                </Button>
-                                            </Box>
-                                        </TableCell>
+                                    const isRowDisabled = isRejected(point.responsibleId);
 
-                                        <TableCell sx={cellStyle}>
-                                            <TextField
-                                                variant="standard"
-                                                placeholder="Select Member"
-                                                fullWidth
-                                                value={point.responsible}
-                                                onChange={(e) => handleChange(index, 'responsible', e.target.value)}
-                                                InputProps={{ disableUnderline: true }}
-                                            />
-                                        </TableCell>
-                                        <TableCell sx={cellStyle}>
-                                            <TextField
-                                                variant="standard"
-                                                placeholder="Select Date"
-                                                fullWidth
-                                                value={point.point_deadline}
-                                                onChange={(e) => handleChange(index, 'point_deadline', e.target.value)}
-                                                InputProps={{ disableUnderline: true }}
-                                            />
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
+                                    // Common style for disabled elements
+                                    const disabledStyle = isRowDisabled ? {
+                                        opacity: 1.0,
+                                        pointerEvents: 'none',
+                                        backgroundColor: '#f5f5f5'
+                                    } : {};
+
+                                    // Merge with existing cell style
+                                    const mergedCellStyle = {
+                                        ...cellStyle,
+                                        ...(isRowDisabled && { backgroundColor: '#f5f5f5' })
+                                    };
+
+                                    return (
+                                        <TableRow key={index}>
+                                            <TableCell sx={{ ...mergedCellStyle, textAlign: "center" }}>{index + 1}</TableCell>
+                                            <TableCell sx={{ ...mergedCellStyle, fontWeight: "normal", maxWidth: "300px" }}>
+                                                <TextField
+                                                    variant="standard"
+                                                    placeholder="Enter discussion topic"
+                                                    multiline
+                                                    fullWidth
+                                                    minRows={1}
+                                                    maxRows={4}
+                                                    value={point.point_name}
+                                                    InputProps={{
+                                                        disableUnderline: true,
+                                                        sx: { fontSize: '14px', fontWeight: 'bold' }
+                                                    }}
+                                                    onChange={(e) => handleChange(index, 'point_name', e.target.value)}
+                                                />
+                                            </TableCell>
+                                            <TableCell sx={mergedCellStyle}>
+                                                <TextField
+                                                    variant="standard"
+                                                    placeholder="Add remarks"
+                                                    fullWidth
+                                                    defaultValue={point.remarks_by_admin}
+                                                    onChange={(e) => handleChange(index, 'remarks_by_admin', e.target.value)}
+                                                    InputProps={{ disableUnderline: true }}
+                                                />
+                                            </TableCell>
+
+                                            <TableCell sx={{ ...cellStyle, textAlign: "center" }}>
+                                                <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 1, alignItems: 'center' }}>
+                                                    {point.DecisionStatus !== "DISAGREE" && point.DecisionStatus !== "FORWARD" && (
+                                                        <Button
+                                                            variant="outlined"
+                                                            sx={{
+                                                                width: '100px',
+                                                                color: "green",
+                                                                borderColor: "green",
+                                                                backgroundColor: "#e6f8e6",
+                                                                textTransform: "none",
+                                                                borderRadius: "14px",
+                                                                fontSize: '10px',
+                                                                gap: 0.5,
+                                                                "&:hover": {
+                                                                    backgroundColor: "#d4edda",
+                                                                },
+                                                            }}
+                                                            onClick={() => {
+                                                                var updatedPoint = point;
+                                                                updatedPoint.DecisionIndex = index;
+                                                                setSelectedPoint(updatedPoint);
+                                                                handleForwardClick("AGREE")
+
+                                                                //handleChangeStatus(index, "AGREE");
+                                                            }}
+                                                        >
+                                                            Agree
+                                                        </Button>
+                                                    )}
+                                                    {point.DecisionStatus !== "DISAGREE" && point.DecisionStatus !== "AGREE" && (
+                                                        <Button
+                                                            variant="outlined"
+                                                            sx={{
+                                                                width: '100px',
+                                                                color: "black",
+                                                                borderColor: "black",
+                                                                backgroundColor: "#D8DEE2",
+                                                                textTransform: "none",
+                                                                borderRadius: "14px",
+                                                                fontSize: '10px',
+                                                                gap: 0.5,
+                                                            }}
+                                                            onClick={() => {
+                                                                var updatedPoint = point;
+                                                                updatedPoint.DecisionIndex = index;
+                                                                setSelectedPoint(updatedPoint);
+                                                                handleForwardClick("FORWARD")
+                                                                //handleChangeStatus(index, "FORWARD");
+                                                            }}
+                                                        >
+                                                            Forward
+                                                        </Button>
+                                                    )}
+                                                    {point.DecisionStatus !== "AGREE" && point.DecisionStatus !== "FORWARD" && (
+                                                        <Button
+                                                            variant="outlined"
+                                                            sx={{
+                                                                width: '100px',
+                                                                color: "red",
+                                                                borderColor: "red",
+                                                                backgroundColor: "#fdecec",
+                                                                textTransform: "none",
+                                                                borderRadius: "14px",
+                                                                fontSize: '10px',
+                                                                gap: 0.5,
+                                                                "&:hover": {
+                                                                    backgroundColor: "#f8d7da",
+                                                                },
+                                                            }}
+                                                            onClick={() => {
+                                                                var updatedPoint = point;
+                                                                updatedPoint.DecisionIndex = index;
+                                                                console.log(meetingAgenda)
+                                                                setSelectedPoint(updatedPoint);
+                                                                handleForwardClick("DISAGREE")
+                                                                //handleChangeStatus(index, "DISAGREE");
+                                                            }}
+                                                        >
+                                                            Not Agree
+                                                        </Button>
+                                                    )}
+                                                </Box>
+                                            </TableCell>
+
+                                            <TableCell sx={{ ...mergedCellStyle, p: 1 }}>
+                                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                                                    <TextField
+                                                        variant="standard"
+                                                        placeholder="Select Member"
+                                                        fullWidth
+                                                        disabled={isRowDisabled}
+                                                        InputProps={{
+                                                            disableUnderline: true,
+                                                            sx: isRowDisabled ? disabledStyle : {}
+                                                        }}
+                                                        value={point.responsible}
+                                                        onChange={(e) => handleChange(index, 'responsible', e.target.value)}
+                                                        sx={{
+                                                            px: 1,
+                                                            py: 0.5,
+                                                            borderRadius: 1,
+                                                            bgcolor: isRejected(point.responsibleId) ? '#ffe5e5' : 'transparent',
+                                                            fontWeight: isRejected(point.responsibleId) ? 'bold' : 'normal',
+                                                            color: isRejected(point.responsibleId) ? 'error.main' : 'inherit',
+                                                        }}
+                                                    />
+                                                    {isRejected(point.responsibleId) && (
+                                                        <Typography
+                                                            component="a"
+                                                            onClick={() => handleViewReason(point.responsibleId, point.responsible)}
+                                                            sx={{
+                                                                fontSize: '0.8rem',
+                                                                color: 'error.main',
+                                                                cursor: 'pointer',
+                                                                textDecoration: 'underline',
+                                                                ml: 1
+                                                            }}
+                                                        >
+                                                            View reason
+                                                        </Typography>
+                                                    )}
+                                                </Box>
+                                            </TableCell>
+
+                                            {/* Show reason popup */}
+                                            {selectedReason && (
+                                                <Reason data={selectedReason} onClose={() => setSelectedReason(null)} />
+                                            )}
+
+                                            <TableCell sx={mergedCellStyle}>
+                                                <TextField
+                                                    variant="standard"
+                                                    placeholder="Select Date"
+                                                    fullWidth
+                                                    disabled={isRowDisabled}
+                                                    InputProps={{
+                                                        disableUnderline: true,
+                                                        sx: isRowDisabled ? disabledStyle : {}
+                                                    }}
+                                                    value={point.point_deadline ? format(new Date(point.point_deadline), 'dd MMM yyyy') : 'NIL'}
+                                                    onChange={(e) => handleChange(index, 'point_deadline', e.target.value)}
+                                                />
+                                            </TableCell>
+                                        </TableRow>)
+                                })}
                             </TableBody>
                         </Table>
                     </TableContainer>
@@ -827,8 +1056,8 @@ export default function StartMeet({ handleBack }) {
                                                         disableUnderline: true,
                                                         sx: isRowDisabled ? disabledStyle : {}
                                                     }}
-                                                    value={format(new Date(point.point_deadline), 'dd MMM yyyy')}
-                                                onChange={(e) => handleChange(index, 'point_deadline', e.target.value)}
+                                                    value={point.point_deadline ? format(new Date(point.point_deadline), 'dd MMM yyyy') : 'NIL'}
+                                                    onChange={(e) => handleChange(index, 'point_deadline', e.target.value)}
                                                 />
                                             </TableCell>
                                         </TableRow>
@@ -840,7 +1069,7 @@ export default function StartMeet({ handleBack }) {
                 )}
 
                 {/* Forwarding Form Modal */}
-                {isForward && (
+                {isForward &&
                     <Box
                         sx={{
                             position: "fixed",
@@ -857,10 +1086,10 @@ export default function StartMeet({ handleBack }) {
                         onClick={() => setIsForward(false)}
                     >
                         <Box onClick={(e) => e.stopPropagation()}>
-                            <ForwardingForm onClose={() => setIsForward(false)} selectedAction={selectedAction} />
+                            <ForwardingForm onClose={() => setIsForward(false)} selectedAction={selectedAction} remarks={selectedPoint.remarks_by_admin || ''} pointId={selectedPoint.point_id || ''} selectedPoint={selectedPoint} handleChangeStatus={handleChangeStatus} />
                         </Box>
                     </Box>
-                )}
+                }
             </Box>
         </Box>
     );

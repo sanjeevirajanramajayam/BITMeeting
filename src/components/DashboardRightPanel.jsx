@@ -39,7 +39,7 @@ const dummyMeetings = [
 
 const getRelevantTimeWindow = (meetings, currentTime) => {
   const currentMinutes = currentTime.getHours() * 60 + currentTime.getMinutes();
-  
+
   // Get upcoming meetings
   const upcomingMeetings = meetings.filter(meeting => {
     const endTime = new Date(meeting.end);
@@ -100,18 +100,18 @@ const getTimeSlots = (startMinutes, endMinutes) => {
 
 const filterAndEnhanceMeetings = (meetings, currentTime) => {
   const currentMinutes = currentTime.getHours() * 60 + currentTime.getMinutes();
-  
+
   // Filter meetings within the visible time range
   const timeSlots = getRelevantTimeSlots(meetings, currentTime);
   const visibleStartMinutes = timeSlots[0].minutes;
   const visibleEndMinutes = timeSlots[timeSlots.length - 1].minutes;
-  
+
   const visibleMeetings = meetings.filter(meeting => {
     const meetingStart = new Date(meeting.start);
     const meetingEnd = new Date(meeting.end);
     const startMinutes = meetingStart.getHours() * 60 + meetingStart.getMinutes();
     const endMinutes = meetingEnd.getHours() * 60 + meetingEnd.getMinutes();
-    
+
     return startMinutes <= visibleEndMinutes && endMinutes >= visibleStartMinutes;
   });
 
@@ -140,22 +140,22 @@ const findOverlappingMeetings = (meetings) => {
     }
     return timeCompare;
   });
-  
+
   // Group overlapping meetings
   const groups = [];
   let currentGroup = [];
-  
+
   sortedMeetings.forEach((meeting) => {
     const meetingStart = new Date(meeting.start);
     const meetingEnd = new Date(meeting.end);
-    
+
     const overlapsWithGroup = currentGroup.some(groupMeeting => {
       const groupStart = new Date(groupMeeting.start);
       const groupEnd = new Date(groupMeeting.end);
-      return (meetingStart.getTime() === groupStart.getTime() && 
-              meetingEnd.getTime() === groupEnd.getTime());
+      return (meetingStart.getTime() === groupStart.getTime() &&
+        meetingEnd.getTime() === groupEnd.getTime());
     });
-    
+
     if (overlapsWithGroup) {
       currentGroup.push(meeting);
     } else {
@@ -165,11 +165,11 @@ const findOverlappingMeetings = (meetings) => {
       currentGroup = [meeting];
     }
   });
-  
+
   if (currentGroup.length > 0) {
     groups.push(currentGroup);
   }
-  
+
   // Calculate position info for each meeting
   const meetingPositions = new Map();
   groups.forEach(group => {
@@ -184,7 +184,7 @@ const findOverlappingMeetings = (meetings) => {
       });
     });
   });
-  
+
   return meetingPositions;
 };
 
@@ -206,7 +206,7 @@ const renderTimelineEventCard = (event, index) => {
   const durationInMinutes = (end - start) / (1000 * 60);
 
   return (
-    <div 
+    <div
       key={index}
       className={`calendar-event-item ${event.color}`}
       style={{
@@ -229,13 +229,12 @@ const renderTimelineEventCard = (event, index) => {
   );
 };
 
-const DashboardRightPanel = () => {
+const DashboardRightPanel = ({ setDate }) => {
   const navigate = useNavigate();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showCreateMeeting, setShowCreateMeeting] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [meetings, setMeetings] = useState(dummyMeetings);
-
   // Update current time every minute
   useEffect(() => {
     const interval = setInterval(() => {
@@ -259,8 +258,8 @@ const DashboardRightPanel = () => {
     // 1. End after current time (not completed)
     // 2. Fall within the visible time window
     return endMinutes > currentTime.getHours() * 60 + currentTime.getMinutes() &&
-           startMinutes <= timeWindow.endMinutes &&
-           endMinutes >= timeWindow.startMinutes;
+      startMinutes <= timeWindow.endMinutes &&
+      endMinutes >= timeWindow.startMinutes;
   });
 
   const meetingPositions = findOverlappingMeetings(visibleMeetings);
@@ -271,7 +270,7 @@ const DashboardRightPanel = () => {
     }, 60000);
     return () => clearInterval(interval);
   }, []);
-  
+
   const getCalendarDays = (date) => {
     const start = startOfMonth(date);
     const end = endOfMonth(date);
@@ -298,13 +297,13 @@ const DashboardRightPanel = () => {
 
   const handleViewMoreCalendar = () => {
     navigate('/calendar');
-  }; 
+  };
 
   return (
     <>
 
       {showCreateMeeting && (
-        <div 
+        <div
           style={{
             position: 'fixed',
             top: 0,
@@ -324,35 +323,35 @@ const DashboardRightPanel = () => {
           />
         </div>
       )}
-      
-      <div style={{ display: 'flex', flexDirection: 'column' , gap:'5px',marginTop:'16px'}}>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', marginTop: '16px' }}>
         <div>
-            <button style={{
-              padding: '0.5rem',
-              backgroundColor: '#27ae60',
-              color: 'white',
-              border: 'none',
-              fontSize: '1rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-              textAlign: 'center',
-              width:'100%',
-              borderRadius: '5px'
-            }} onClick={handleCreateMeetingClick}>
-              <AddCircleOutlineIcon/>
-              Create Meeting
-            </button>
+          <button style={{
+            padding: '0.5rem',
+            backgroundColor: '#27ae60',
+            color: 'white',
+            border: 'none',
+            fontSize: '1rem',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            textAlign: 'center',
+            width: '100%',
+            borderRadius: '5px'
+          }} onClick={handleCreateMeetingClick}>
+            <AddCircleOutlineIcon />
+            Create Meeting
+          </button>
         </div>
-        
-        <div style={{ flex: 1, backgroundColor: 'white', borderRadius: '0.5rem', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem'}}>
+
+        <div style={{ flex: 1, backgroundColor: 'white', borderRadius: '0.5rem', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           <div style={{ backgroundColor: 'white', padding: '0.25rem', borderRadius: '0.25rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', color: 'black' }}>
               <h2 style={{ fontSize: '1.5rem', fontWeight: 600, color: '#1a1a1a', margin: 0 }}>{format(selectedDate, 'MMM dd-yyyy')}</h2>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <Button
+                <Button
                   onClick={handleViewMoreCalendar}
                   sx={{
                     textTransform: 'none',
@@ -379,7 +378,7 @@ const DashboardRightPanel = () => {
                 </Button>
               </div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '0.5rem'}}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '0.5rem' }}>
               {weekDays.map(day => (
                 <div key={day} style={{ textAlign: 'center', fontWeight: 600, color: '#666', padding: '0.25rem', fontSize: '0.75rem' }}>{day}</div>
               ))}
@@ -402,7 +401,7 @@ const DashboardRightPanel = () => {
                     margin: 'auto',
                     backgroundColor: isSameDay(day, selectedDate) ? '#4299e1' : 'transparent'
                   }}
-                  onClick={() => setSelectedDate(day)}
+                  onClick={() => { setSelectedDate(day); setDate(day); }}
                 >
                   {format(day, 'd')}
                   {meetings.some(meeting => isSameDay(meeting.date, day)) && (
@@ -414,183 +413,183 @@ const DashboardRightPanel = () => {
           </div>
 
           {/* Schedule Section */}
-            <h3 style={{ fontSize: '1.5rem', fontWeight: 600, color: '#1a1a1a', margin: '0 0 1rem 0' }}>Today's Schedule</h3>
-            <div style={{ 
-              position: 'relative', 
-              height: '300px', 
-              backgroundColor: '#ffffff',
-              borderRadius: '12px',
-              padding: '1rem',
-              overflow: 'hidden',
-              border: '1px solid #e2e8f0'
+          <h3 style={{ fontSize: '1.5rem', fontWeight: 600, color: '#1a1a1a', margin: '0 0 1rem 0' }}>Today's Schedule</h3>
+          <div style={{
+            position: 'relative',
+            height: '300px',
+            backgroundColor: '#ffffff',
+            borderRadius: '12px',
+            padding: '1rem',
+            overflow: 'hidden',
+            border: '1px solid #e2e8f0'
+          }}>
+            {/* Time slots */}
+            <div style={{
+              position: 'absolute',
+              left: '0',
+              top: '0',
+              bottom: '0',
+              width: '45px',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              fontSize: '0.75rem',
+              color: '#64748b',
+              zIndex: 2,
+              padding: '10px 0'
             }}>
-              {/* Time slots */}
-              <div style={{
-                position: 'absolute',
-                left: '0',
-                top: '0',
-                bottom: '0',
-                width: '45px',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-                fontSize: '0.75rem',
-                color: '#64748b',
-                zIndex: 2,
-                padding: '10px 0'
-              }}>
-                {timeSlots.map((slot, index) => (
-                  <div key={index} style={{
-                    position: 'absolute',
-                    top: `${(index * 100) / (timeSlots.length - 1)}%`,
-                    width: '100%',
-                    textAlign: 'right',
-                    paddingRight: '0.5rem',
-                    transform: 'translateY(-50%)',
-                    fontSize: '0.65rem',
-                    fontFamily: 'monospace'
-                  }}>
-                    {slot.label}
-                  </div>
-                ))}
-              </div>
-
-              {/* Current time line and indicator */}
-              <div style={{
-                position: 'absolute',
-                left: '0',
-                right: '0',
-                top: `${((currentTime.getHours() * 60 + currentTime.getMinutes() - timeWindow.startMinutes) / 
-                  (timeWindow.endMinutes - timeWindow.startMinutes)) * 100}%`,
-                zIndex: 3,
-                transform: 'translateY(-50%)',
-                display: 'flex',
-                alignItems: 'center'
-              }}>
-                {/* Time display on left */}
-                <div style={{
-                  width: '45px',
-                  fontSize: '0.75rem',
-                  color: '#10b981',
-                  fontWeight: '500',
-                  textAlign: 'right',
-                  paddingRight: '8px'
-                }}>
-                  {formatCurrentTime(currentTime)}
-                </div>
-
-                {/* Time indicator dot */}
-                <div style={{
-                  width: '10px',
-                  height: '10px',
-                  backgroundColor: '#10b981',
-                  borderRadius: '50%',
-                  boxShadow: '0 0 0 2px rgba(16, 185, 129, 0.2)',
-                  position: 'relative',
-                  zIndex: 2,
-                  marginLeft: '-5px'
-                }} />
-
-                {/* Horizontal line */}
-                <div style={{
+              {timeSlots.map((slot, index) => (
+                <div key={index} style={{
                   position: 'absolute',
-                  left: '45px',
-                  right: '0',
-                  height: '2px',
-                  backgroundColor: '#10b981',
-                  opacity: 0.6,
-                  zIndex: 1
-                }} />
+                  top: `${(index * 100) / (timeSlots.length - 1)}%`,
+                  width: '100%',
+                  textAlign: 'right',
+                  paddingRight: '0.5rem',
+                  transform: 'translateY(-50%)',
+                  fontSize: '0.65rem',
+                  fontFamily: 'monospace'
+                }}>
+                  {slot.label}
+                </div>
+              ))}
+            </div>
+
+            {/* Current time line and indicator */}
+            <div style={{
+              position: 'absolute',
+              left: '0',
+              right: '0',
+              top: `${((currentTime.getHours() * 60 + currentTime.getMinutes() - timeWindow.startMinutes) /
+                (timeWindow.endMinutes - timeWindow.startMinutes)) * 100}%`,
+              zIndex: 3,
+              transform: 'translateY(-50%)',
+              display: 'flex',
+              alignItems: 'center'
+            }}>
+              {/* Time display on left */}
+              <div style={{
+                width: '45px',
+                fontSize: '0.75rem',
+                color: '#10b981',
+                fontWeight: '500',
+                textAlign: 'right',
+                paddingRight: '8px'
+              }}>
+                {formatCurrentTime(currentTime)}
               </div>
 
-              {/* Timeline vertical line */}
+              {/* Time indicator dot */}
               <div style={{
-                position: 'absolute',
-                left: '50px',
-                top: '0',
-                bottom: '0',
-                width: '1px',
-                backgroundColor: '#e2e8f0',
-                zIndex: 1
+                width: '10px',
+                height: '10px',
+                backgroundColor: '#10b981',
+                borderRadius: '50%',
+                boxShadow: '0 0 0 2px rgba(16, 185, 129, 0.2)',
+                position: 'relative',
+                zIndex: 2,
+                marginLeft: '-5px'
               }} />
 
-              {/* Events container */}
+              {/* Horizontal line */}
               <div style={{
-                position: 'relative',
-                height: '100%',
-                marginLeft: '60px',
-                paddingRight: '1rem',
-                overflowX: 'auto' // Allow horizontal scroll for multiple meetings
-              }}>
-                {visibleMeetings.map((meeting, index) => {
-                  const startTime = new Date(meeting.start);
-                  const endTime = new Date(meeting.end);
-                  const startMinutes = startTime.getHours() * 60 + startTime.getMinutes();
-                  const endMinutes = endTime.getHours() * 60 + endTime.getMinutes();
-                  
-                  const topPosition = ((startMinutes - timeWindow.startMinutes) / 
-                    (timeWindow.endMinutes - timeWindow.startMinutes)) * 100;
-                  const height = ((endMinutes - startMinutes) / 
-                    (timeWindow.endMinutes - timeWindow.startMinutes)) * 100;
-
-                  const position = meetingPositions.get(meeting.id) || { 
-                    width: '200px', 
-                    left: '0px', 
-                    groupSize: 1, 
-                    groupIndex: 0,
-                    totalInGroup: 1 
-                  };
-
-                  return (
-                    <div
-                      key={index}
-                      style={{
-                        position: 'absolute',
-                        top: `${topPosition}%`,
-                        left: position.left,
-                        width: position.width,
-                        height: `${height}%`,
-                        zIndex: 2,
-                        minHeight: '60px',
-                        padding: '0 4px',
-                        opacity: endMinutes < (currentTime.getHours() * 60 + currentTime.getMinutes()) ? 0.5 : 1
-                      }}
-                    >
-                      <div style={{
-                        height: '100%',
-                        position: 'relative'
-                      }}>
-                        {/* Use custom timeline event card instead of EventCard component */}
-                        {renderTimelineEventCard({
-                          ...meeting,
-                          start: startTime.toISOString(),
-                          end: endTime.toISOString()
-                        }, index)}
-                        
-                        {position.totalInGroup > 1 && position.groupIndex === 0 && (
-                          <div style={{
-                            position: 'absolute',
-                            top: '4px',
-                            right: '-24px',
-                            backgroundColor: 'rgba(0,0,0,0.1)',
-                            borderRadius: '12px',
-                            padding: '2px 6px',
-                            fontSize: '0.7rem',
-                            color: '#666',
-                            zIndex: 3,
-                            fontWeight: '500'
-                          }}>
-                            +{position.totalInGroup - 1}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                position: 'absolute',
+                left: '45px',
+                right: '0',
+                height: '2px',
+                backgroundColor: '#10b981',
+                opacity: 0.6,
+                zIndex: 1
+              }} />
             </div>
+
+            {/* Timeline vertical line */}
+            <div style={{
+              position: 'absolute',
+              left: '50px',
+              top: '0',
+              bottom: '0',
+              width: '1px',
+              backgroundColor: '#e2e8f0',
+              zIndex: 1
+            }} />
+
+            {/* Events container */}
+            <div style={{
+              position: 'relative',
+              height: '100%',
+              marginLeft: '60px',
+              paddingRight: '1rem',
+              overflowX: 'auto' // Allow horizontal scroll for multiple meetings
+            }}>
+              {visibleMeetings.map((meeting, index) => {
+                const startTime = new Date(meeting.start);
+                const endTime = new Date(meeting.end);
+                const startMinutes = startTime.getHours() * 60 + startTime.getMinutes();
+                const endMinutes = endTime.getHours() * 60 + endTime.getMinutes();
+
+                const topPosition = ((startMinutes - timeWindow.startMinutes) /
+                  (timeWindow.endMinutes - timeWindow.startMinutes)) * 100;
+                const height = ((endMinutes - startMinutes) /
+                  (timeWindow.endMinutes - timeWindow.startMinutes)) * 100;
+
+                const position = meetingPositions.get(meeting.id) || {
+                  width: '200px',
+                  left: '0px',
+                  groupSize: 1,
+                  groupIndex: 0,
+                  totalInGroup: 1
+                };
+
+                return (
+                  <div
+                    key={index}
+                    style={{
+                      position: 'absolute',
+                      top: `${topPosition}%`,
+                      left: position.left,
+                      width: position.width,
+                      height: `${height}%`,
+                      zIndex: 2,
+                      minHeight: '60px',
+                      padding: '0 4px',
+                      opacity: endMinutes < (currentTime.getHours() * 60 + currentTime.getMinutes()) ? 0.5 : 1
+                    }}
+                  >
+                    <div style={{
+                      height: '100%',
+                      position: 'relative'
+                    }}>
+                      {/* Use custom timeline event card instead of EventCard component */}
+                      {renderTimelineEventCard({
+                        ...meeting,
+                        start: startTime.toISOString(),
+                        end: endTime.toISOString()
+                      }, index)}
+
+                      {position.totalInGroup > 1 && position.groupIndex === 0 && (
+                        <div style={{
+                          position: 'absolute',
+                          top: '4px',
+                          right: '-24px',
+                          backgroundColor: 'rgba(0,0,0,0.1)',
+                          borderRadius: '12px',
+                          padding: '2px 6px',
+                          fontSize: '0.7rem',
+                          color: '#666',
+                          zIndex: 3,
+                          fontWeight: '500'
+                        }}>
+                          +{position.totalInGroup - 1}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
-          
+
       </div>
 
     </>

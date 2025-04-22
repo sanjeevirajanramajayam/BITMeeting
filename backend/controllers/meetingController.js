@@ -23,32 +23,75 @@ function groupMembersByRole(data) {
     }));
 }
 
-const insertForwardedPoints = async (meetingId, templateId) => {
+const insertForwardedPoints = async (meetingId, templateId, userId) => {
     try {
         const [futurePoints] = await db.query(
-            `SELECT point_id FROM meeting_point_future WHERE template_id = ?`,
-            [templateId]
+            `SELECT point_id FROM meeting_point_future 
+             WHERE template_id = ? AND user_id = ? AND forwarded_decision = 'false' AND forward_type != 'NIL'`,
+            [templateId, userId]
         );
 
-        if (futurePoints.length > 0) {
+        console.log(userId, meetingId, templateId, futurePoints)
+
+        const pointIds = futurePoints.map(p => p.point_id);
+
+        if (pointIds.length > 0) {
             await db.query(
                 `INSERT INTO meeting_points (meeting_id, point_name, point_responsibility, point_deadline, todo, remarks)
-                SELECT ?, point_name, point_responsibility, point_deadline, todo, remarks 
-                FROM meeting_points WHERE id IN (?)`,
-                [meetingId, futurePoints.map(p => p.point_id)]
+                 SELECT ?, point_name, point_responsibility, point_deadline, todo, remarks 
+                 FROM meeting_points 
+                 WHERE id IN (?)`,
+                [meetingId, pointIds]
             );
 
             await db.query(
-                `DELETE FROM meeting_point_future WHERE template_id = ?`,
-                [templateId]
+                `UPDATE meeting_point_future 
+                 SET forwarded_decision = 'true'
+                 WHERE template_id = ? AND user_id = ? AND point_id IN (?)`,
+                [templateId, userId, pointIds]
             );
 
-            console.log(`Forwarded ${futurePoints.length} points to meeting ${meetingId}.`);
+            console.log(`Forwarded ${pointIds.length} points to meeting ${meetingId}.`);
         }
     } catch (error) {
         console.error("Error inserting forwarded points:", error);
     }
 };
+
+
+const getForwardedPoints = async (req, res) => {
+    const {
+        templateId,
+    } = req.body;
+
+    var userId = req.user.userId;
+
+    if (!templateId || !userId) {
+        return res.status(400).json({
+            message: "Missing templateId or userId"
+        });
+    }
+
+    try {
+        const [forwardedPoints] = await db.query(
+            `SELECT point_id, forward_type, forward_decision 
+             FROM meeting_point_future 
+             WHERE template_id = ? AND user_id = ? AND forwarded_decision = 'false' AND forward_type != 'NIL'`,
+            [templateId, userId]
+        );
+
+        res.json({
+            forwardedCount: forwardedPoints.length,
+            points: forwardedPoints
+        });
+    } catch (error) {
+        console.error("Error fetching forwarded points:", error);
+        res.status(500).json({
+            message: "Server error"
+        });
+    }
+};
+
 
 const createMeeting = async (req, res) => {
     var {
@@ -120,7 +163,6 @@ const createMeeting = async (req, res) => {
                 meetingData.next_schedule
             ]
         );
-
         const meetingId = meetingResult.insertId;
 
         if (!roles) {
@@ -131,7 +173,7 @@ const createMeeting = async (req, res) => {
             roles = groupMembersByRole(templateRoles);
         }
 
-        insertForwardedPoints(meetingId, templateId);
+        insertForwardedPoints(meetingId, templateId, created_by);
 
         if (!points) {
             const [meetingPoints] = await db.query(
@@ -201,7 +243,7 @@ const getUserMeetingResponse = async (req, res) => {
     } = req.body;
     const userId = req.user.userId;
 
-    console.log(meetingId, userId);
+
 
     if (!meetingId) {
         return res.status(400).json({
@@ -372,20 +414,31 @@ const getMeetingbyId = async (req, res) => {
     var accessUserId = req.user.userId;
 
     // Get created_by user from meeting table
-    var [
-        [createdUserId]
+    // Fetch created_by user
+    const [
+        [meetingData]
     ] = await db.query(
         `SELECT created_by FROM meeting WHERE id = ?`,
         [id]
     );
 
-    // Authorization check
-    if (createdUserId.created_by !== accessUserId) {
+    // Fetch all member user IDs for the meeting
+    const [meetingMembers] = await db.query(
+        `SELECT user_id FROM meeting_members WHERE meeting_id = ?`,
+        [id]
+    );
+
+    // Check if the user is the creator or a member
+    const isCreator = meetingData.created_by === accessUserId;
+    const isMember = meetingMembers.some(member => member.user_id === accessUserId);
+
+    if (!isCreator && !isMember) {
         return res.status(403).json({
             success: false,
-            message: `Authorization is required`
+            message: 'Authorization is required'
         });
     }
+
 
     try {
         // Fetch template with venue, category, and creator details
@@ -397,6 +450,7 @@ const getMeetingbyId = async (req, res) => {
                 meeting.priority,
                 meeting.start_time,
                 meeting.end_time,
+                meeting.meeting_status,
                 venues.name AS venue_name,
                 users.name AS created_by
             FROM meeting
@@ -588,6 +642,7 @@ const getUserResponsibilities = async (req, res) => {
                 mp.todo,
                 mp.remarks,
                 mp.point_status,
+                mp.point_deadline,
                 u.name
             FROM meeting_points mp JOIN users u ON 
             mp.point_responsibility = u.id
@@ -734,10 +789,10 @@ const respondToMeetingInvite = async (req, res) => {
     } = req.body;
     const userId = req.user.userId;
 
-    if (!meetingId || !['accept', 'reject'].includes(status)) {
+    if (!meetingId || !['accept', 'reject', 'joined'].includes(status)) {
         return res.status(400).json({
             success: false,
-            message: 'Valid meetingId and status ("accept" or "reject") are required'
+            message: 'Valid meetingId and status ("accept" or "reject" or "joined") are required'
         });
     }
 
@@ -841,23 +896,28 @@ const markAttendance = async (req, res) => {
         const name = userDetails[0].name;
 
         if (status === 'present') {
-            // Check if attendance is already marked
+            // Check if attendance record already exists
             const [attendanceCheck] = await db.query(
                 `SELECT id FROM meeting_attendence WHERE meeting_id = ? AND user_id = ?`,
                 [meetingId, userId]
             );
 
             if (attendanceCheck.length > 0) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Attendance already marked for this user"
-                });
+                // Update existing record
+                await db.query(
+                    `UPDATE meeting_attendence 
+                     SET role = ?, user_name = ?, updated_at = CURRENT_TIMESTAMP 
+                     WHERE meeting_id = ? AND user_id = ?`,
+                    [role, name, meetingId, userId]
+                );
+            } else {
+                // Create new record
+                await db.query(
+                    `INSERT INTO meeting_attendence (meeting_id, user_id, role, user_name) 
+                     VALUES (?, ?, ?, ?)`,
+                    [meetingId, userId, role, name]
+                );
             }
-
-            await db.query(
-                `INSERT INTO meeting_attendence (meeting_id, user_id, role, user_name) VALUES (?, ?, ?, ?)`,
-                [meetingId, userId, role, name]
-            );
 
             return res.status(200).json({
                 success: true,
@@ -865,21 +925,16 @@ const markAttendance = async (req, res) => {
             });
 
         } else if (status === 'absent') {
+            // Delete attendance record if exists
             const [deleteResult] = await db.query(
                 `DELETE FROM meeting_attendence WHERE meeting_id = ? AND user_id = ?`,
                 [meetingId, userId]
             );
 
-            if (deleteResult.affectedRows === 0) {
-                return res.status(400).json({
-                    success: false,
-                    message: "User was not marked as present"
-                });
-            }
-
             return res.status(200).json({
                 success: true,
-                message: "Attendance marked as absent"
+                message: deleteResult.affectedRows > 0 ?
+                    "Attendance marked as absent" : "No attendance record to remove"
             });
 
         } else {
@@ -899,14 +954,14 @@ const markAttendance = async (req, res) => {
 };
 
 const forwardMeetingPoint = async (req, res) => {
-    var {
+    let {
         pointId,
         templateId,
         forwardType,
         forwardDecision,
     } = req.body;
 
-    var accessUserId = req.user.userId
+    const accessUserId = req.user.userId;
 
     if (!pointId || !forwardType || !forwardDecision || !accessUserId) {
         return res.status(400).json({
@@ -915,8 +970,14 @@ const forwardMeetingPoint = async (req, res) => {
         });
     }
 
+    // if (forwardType === 'NIL') {
+    //     return res.status(200).json({
+    //         success: true,
+    //         message: `Point ${pointId} not forwarded because forwardType is NIL.`
+    //     });
+    // }
+
     try {
-        // Check if the point exists
         const [pointExists] = await db.query(
             `SELECT meeting_id FROM meeting_points WHERE id = ?`,
             [pointId]
@@ -947,7 +1008,6 @@ const forwardMeetingPoint = async (req, res) => {
             templateId = templateRow[0].template_id;
         }
 
-        // Get the creator of the meeting
         const [createdUserRow] = await db.query(
             `SELECT created_by FROM meeting WHERE id = ?`,
             [meetingId]
@@ -970,31 +1030,39 @@ const forwardMeetingPoint = async (req, res) => {
         }
 
         const [existingRows] = await db.query(
-            `SELECT * FROM meeting_point_future WHERE point_id = ? AND template_id = ?`,
-            [pointId, templateId]
+            `SELECT * FROM meeting_point_future WHERE point_id = ?`,
+            [pointId]
         );
 
         if (existingRows.length > 0) {
-            return res.status(409).json({
-                success: false,
-                message: `Point ${pointId} is already marked for forwarding in future meetings of template ${templateId}.`
+            await db.query(
+                `UPDATE meeting_point_future 
+                 SET forward_type = ?, user_id = ?, forward_decision = ?, template_id = ?
+                 WHERE point_id = ?`,
+                [forwardType, accessUserId, forwardDecision, templateId, pointId]
+            );
+
+            return res.status(200).json({
+                success: true,
+                message: `Point ${pointId} updated in future meetings of template ${templateId}.`
+            });
+        } else {
+            // INSERT new row
+            await db.query(
+                `INSERT INTO meeting_point_future (point_id, template_id, forward_type, user_id, forward_decision)
+                 VALUES (?, ?, ?, ?, ?)`,
+                [pointId, templateId, forwardType, accessUserId, forwardDecision]
+            );
+
+            return res.status(201).json({
+                success: true,
+                message: `Point ${pointId} marked for forwarding in future meetings of template ${templateId}.`
             });
         }
 
-        await db.query(
-            `INSERT INTO meeting_point_future (point_id, template_id, forward_type, carry_over, forward_decision)
-             VALUES (?, ?, ?, ?, ?)`,
-            [pointId, templateId, forwardType, 1, forwardDecision]
-        );
-
-        res.status(201).json({
-            success: true,
-            message: `Point ${pointId} marked for forwarding in future meetings of template ${templateId}.`
-        });
-
     } catch (error) {
         console.error("Error forwarding meeting point:", error);
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
             message: 'Server error'
         });
@@ -1005,31 +1073,25 @@ const getUserMeetings = async (req, res) => {
     const id = req.user.userId;
 
     try {
-        // 1. Get meetings where user is a member
         const [memberMeetings] = await db.query(
             `SELECT meeting_id, role FROM meeting_members WHERE user_id = ?;`,
             [id]
         );
 
-        // 2. Get meetings where user is the creator
         const [creatorMeetings] = await db.query(
             `SELECT id FROM meeting WHERE created_by = ?;`,
             [id]
         );
 
-        // 3. Get rejected meeting IDs by the user
         const [rejectedMeetings] = await db.query(
             `SELECT meeting_id FROM meeting_rejections WHERE user_id = ?;`,
             [id]
         );
 
-        // Create a Set of rejected meeting IDs for fast lookup
         const rejectedMeetingIds = new Set(rejectedMeetings.map(r => r.meeting_id));
 
-        // Combine meeting IDs from both queries into a map with roles
         const meetingIdRoleMap = new Map();
 
-        // Add member meetings with their roles (excluding rejected)
         memberMeetings.forEach(({
             meeting_id,
             role
@@ -1080,7 +1142,7 @@ const getUserMeetings = async (req, res) => {
 
         // 5. Fetch meeting points
         const [meetingPoints] = await db.query(
-            `SELECT mp.*, u.name             FROM bit_meeting_test.meeting_points mp
+            `SELECT mp.*, u.name FROM bit_meeting_test.meeting_points mp
              LEFT JOIN bit_meeting_test.users u ON mp.point_responsibility = u.id
              WHERE meeting_id IN (${placeholders})`,
             meetingIds
@@ -1135,7 +1197,8 @@ const getUserMeetings = async (req, res) => {
                 point_deadline: point.point_deadline,
                 point_id: point.id,
                 approved_by_admin: point.approved_by_admin,
-                old_todo: point.old_todo
+                old_todo: point.old_todo,
+                remarks_by_admin: point.remarks_by_admin
             });
         });
         // 8. Add role info, members, and points to each meeting
@@ -1277,7 +1340,7 @@ const getAttendanceRecords = async (req, res) => {
 
         // Check if the user already rejected the meeting
         const [AttendanceRecords] = await db.query(
-            `SELECT u.name, ma.user_name
+            `SELECT u.name, ma.user_name, u.id
             FROM bit_meeting_test.meeting_members AS mm
             LEFT JOIN bit_meeting_test.meeting_attendence AS ma 
                 ON ma.user_id = mm.user_id 
@@ -1297,6 +1360,7 @@ const getAttendanceRecords = async (req, res) => {
         }
 
         const TransformedAttendanceRecords = AttendanceRecords.map(user => ({
+            userId: user.id,
             name: user.name,
             attendance_status: user.user_name ? 'present' : 'absent'
         }));
@@ -1391,6 +1455,7 @@ const addAdminRemarks = async (req, res) => {
         pointId,
         adminRemarks
     } = req.body;
+
 
     var accessUserId = req.user.userId;
 
@@ -1498,6 +1563,7 @@ const getMeetingAgenda = async (req, res) => {
                 mp.todo,
                 mp.remarks,
                 mp.point_status,
+                mp.point_deadline,
                 mp.point_responsibility AS responsible_user_id,
                 u.name AS responsible_user_name
              FROM meeting_points mp
@@ -1521,6 +1587,7 @@ const getMeetingAgenda = async (req, res) => {
             [id]
         );
 
+
         // Create a map of forwarding info by point_id
         const forwardingMap = forwardingInfo.reduce((acc, info) => {
             acc[info.point_id] = {
@@ -1543,6 +1610,7 @@ const getMeetingAgenda = async (req, res) => {
                 todo: point.todo,
                 remarks: point.remarks,
                 admin_remarks: point.remarks_by_admin,
+                deadline: point.point_deadline,
                 status: point.approved_by_admin || point.point_status || 'PENDING'
             };
 
@@ -1859,8 +1927,9 @@ async function updatePoint(req, res) {
         old_todo,
         meetingId
     } = req.body;
+    console.log(point_deadline)
 
-    point_deadline = new Date(point_deadline).toISOString().slice(0, 19).replace('T', ' ');
+    point_deadline ? new Date(point_deadline).toISOString().slice(0, 19).replace('T', ' ') : null
 
     const accessUserId = req.user.userId;
 
@@ -2021,5 +2090,6 @@ module.exports = {
     respondToMeetingInvite,
     getUserMeetingResponse,
     getMeetingStatus,
-    updatePoint
+    updatePoint,
+    getForwardedPoints
 }

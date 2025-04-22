@@ -16,6 +16,7 @@ import Cmeeting from './components/template1';
 import JoinMeet from './pages/joinmeet';
 import AdminChooser from './components/AdminChooser';
 import EditPoint from './pages/EditPoints';
+import MeetingReportView from './pages/MeetingReportView';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -44,6 +45,7 @@ function App() {
               <Sidebar className="sidebar" />
               <div className="main-content">
                 <Routes>
+                  <Route path='/reportview' element={<MeetingReportView />} />
                   <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/create-meeting" element={<CreateMeeting />} />
                   <Route path="/admin-access" element={<AdminChooser />} />
@@ -60,6 +62,7 @@ function App() {
                   <Route path="*" element={<Navigate to="/dashboard" replace />} />
                   <Route path='/calendar' element={<Calendar />} />
                   <Route path='/editpoints' element={<EditPoint />} />
+                  <Route path='/reports/:id' element={<MeetingReportView />} />
                 </Routes>
               </div>
             </>

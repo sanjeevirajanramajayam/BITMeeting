@@ -408,7 +408,6 @@ const templateList = async (req, res) => {
             LEFT JOIN users u ON t.created_by = u.id
         `);
 
-        console.log("Fetched Templates:", templates); // Debugging
 
         if (!templates || templates.length === 0) {
             return res.status(404).json({

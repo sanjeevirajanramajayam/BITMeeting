@@ -10,14 +10,22 @@ import SearchIcon from '@mui/icons-material/Search';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import axios from 'axios';
 import customParseFormat from "dayjs/plugin/customParseFormat";
+import { formatInTimeZone } from "date-fns-tz";
 // dayjs.extend(customParseFormat);
 const Dashboard = () => {
   const [activeTab, setActiveTab] = useState("Todo");
-  const [date, setDate] = useState(dayjs());
+  const [date, setDate] = useState(new Date());
   const [meetings, setMeetings] = useState([]);
   const navigate = useNavigate();
 
   const tabs = ["Todo", "Scheduled", "Draft"];
+
+  const meeting_progress = (points) => {
+    if (!points || points.length === 0) return 0;
+
+    const approvedCount = points.filter(point => point.approved_by_admin === "APPROVED").length;
+    return Math.round((approvedCount / points.length) * 100).toString() + "%";
+  };
 
   const fetchMeetings = async () => {
     try {
@@ -29,24 +37,32 @@ const Dashboard = () => {
       });
 
       if (response.data.success) {
-        const formattedMeetings = response.data.meetings.map(meeting => ({
-          id: meeting.id,
-          type: `Info: ${meeting.role}`,
-          title: meeting.meeting_name,
-          date: dayjs(meeting.start_time).format("dddd, D MMMM, YYYY"),
-          time: dayjs(meeting.start_time).format("h:mm A"),
-          duration: dayjs(meeting.end_time).diff(dayjs(meeting.start_time), 'minute') + " min",
-          location: meeting.venue_name, // updated line
-          description: meeting.meeting_description,
-          host: `${meeting.created_by}`,
-          priority: meeting.priority.toUpperCase() + " PRIORITY",
-          deadline: meeting.meeting_status === "not_started" ? "Upcoming" : null,
-          progress: meeting.meeting_status === "in_progress" ? "40%" : null,
-          repeat_type: meeting.repeat_type.toUpperCase(),
-          members: meeting.members,
-          points: meeting.points,
-          host_id: meeting.created_by_id
-        }));
+        const formattedMeetings = response.data.meetings.map(meeting => {
+          var formattedDate = `${formatInTimeZone(meeting.start_time, 'UTC', 'dd MMMM, yyyy')} | ${formatInTimeZone(meeting.start_time, 'UTC', 'hh:mm a')} - ${formatInTimeZone(meeting.end_time, 'UTC', 'hh:mm a')}`
+          return ({
+            id: meeting.id,
+            type: `Info: ${meeting.role}`,
+            title: meeting.meeting_name,
+            date: dayjs(meeting.start_time).format("dddd, D MMMM, YYYY"),
+            dateText: formattedDate,
+            time: dayjs(meeting.start_time).format("h:mm A"),
+            duration: dayjs(meeting.end_time).diff(dayjs(meeting.start_time), 'minute') + " min",
+            location: meeting.venue_name, // updated line
+            description: meeting.meeting_description,
+            host: `${meeting.created_by}`,
+            priority: meeting.priority.toUpperCase() + " PRIORITY",
+            deadline: meeting.meeting_status === "not_started" ? "Upcoming" : null,
+            progress: meeting.meeting_status === "not_started" ? meeting_progress(meeting.points) : null,
+            repeat_type: meeting.repeat_type.toUpperCase(),
+            members: meeting.members,
+            points: meeting.points,
+            host_id: meeting.created_by_id,
+            meeting_status: meeting.meeting_status
+          })
+        });
+        console.log(formattedMeetings)
+        // console.log(`${formatInTimeZone(new Date(formattedMeetings.start_time), 'UTC', 'dd/MM/yyyy')}`)
+
         setMeetings(formattedMeetings);
       }
     } catch (error) {
@@ -56,15 +72,25 @@ const Dashboard = () => {
   //var filteredMeetings = [];
   useEffect(() => {
     fetchMeetings();
+    const interval = setInterval(() => {
+      fetchMeetings()
+    }, 3000);
+
+    return () => clearInterval(interval);
   }, []);
+
+
 
   // filteredMeetings = meetings;
 
   const filteredMeetings = meetings.filter((meeting) => {
     const meetingDate = parse(meeting.date, "EEEE, d MMMM, yyyy", new Date());
-  
+    if (meeting.meeting_status == 'completed') {
+      return false
+    }
+
     if (activeTab === "Todo") {
-      return isSameDay(meetingDate, new Date());
+      return isSameDay(meetingDate, date);
     } else if (activeTab === "Scheduled") {
       return isAfter(meetingDate, new Date());
     } else if (activeTab === "Draft") {
@@ -72,7 +98,7 @@ const Dashboard = () => {
     } else {
       return true;
     }
-  });  
+  });
 
   // const filteredMeetings = meetings.filter((meeting) => {
   //   const meetingDate = dayjs(meeting.date, "dddd, D MMMM, YYYY");

@@ -5,20 +5,16 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
 import CloseIcon from "@mui/icons-material/Close";
-import { CheckBox } from "@mui/icons-material";
 import { useLocation, useNavigate } from "react-router-dom";
 import AttendanceIcon from "@mui/icons-material/HowToReg";
 import AgendaIcon from "@mui/icons-material/Groups";
 import axios from "axios";
-import { Cancel } from "@mui/icons-material";
 import CancelIcon from '@mui/icons-material/Cancel';
 import CheckBoxIcon from '@mui/icons-material/CheckBox';
 import MeetingRejection from "../components/MeetingRejection";
-
-// import { CheckBoxI } from "@mui/icons-material";
 import { FormatBold, FormatItalic, FormatUnderlined, FormatAlignLeft, FormatAlignCenter, FormatAlignRight, Link } from "@mui/icons-material";
-
 import image from "../assets/bannariammanheader.png";
+import format from "date-fns/format";
 
 const Reject = ({ onClose, handleSave }) => {
     return (
@@ -108,17 +104,22 @@ const Reject = ({ onClose, handleSave }) => {
     );
 };
 
-export default function JoinMeet({ onBack }) {
+export default function JoinMeet() {
     const navigate = useNavigate();
     const [openRejectCard, setOpenRejectCard] = useState(false);
     const [isAccpet, setIsAccept] = useState(false);
     const [onJoin, setOnJoin] = useState(false);
     const [selectedTab, setSelectedTab] = useState("attendance");
     const [pointData, setPointData] = useState([]);
+    const [attendanceRecords, setAttendanceRecords] = useState([]);
+    const [meetingAgenda, setMeetingAgenda] = useState([]);
+
+    const onBack = () => {
+        navigate('/dashboard')
+    }
 
     const location = useLocation();
     const { meetingData } = location.state || {};
-    console.log(meetingData)
 
     const handleCancelMeeting = () => {
         setOpenRejectCard(true);
@@ -128,6 +129,69 @@ export default function JoinMeet({ onBack }) {
         setOpenRejectCard(false);
         navigate('/dashboard')
     };
+
+    useEffect(() => {
+        const fetchAttendanceData = async () => {
+            try {
+                const response = await axios.get(
+                    `http://localhost:5000/api/meetings/get-attendance-records/${meetingData.id}`
+                );
+                console.log(response.data.data)
+                setAttendanceRecords(response.data.data);
+            } catch (err) {
+                console.error(err)
+                const allMembers = Object.values(meetingData.members).flat();
+                setAttendanceRecords(allMembers.map(member => ({
+                    name: member.name,
+                    attendance_status: 'absent',
+                })));
+            }
+        };
+        fetchAttendanceData();
+    }, [meetingData.id]);
+
+    useEffect(() => {
+        const token = localStorage.getItem('token')
+        const fetchAgenda = async () => {
+            try {
+                const response = await axios.get(
+                    `http://localhost:5000/api/meetings/get-meeting-agenda/${meetingData.id}`
+                    , {
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                        }
+                    });
+                setMeetingAgenda(response.data.data.points);
+                console.log(response.data.data)
+            } catch (err) {
+                console.error(err)
+            }
+        }
+
+        const fetchAttendanceData = async () => {
+            try {
+                const response = await axios.get(
+                    `http://localhost:5000/api/meetings/get-attendance-records/${meetingData.id}`
+                );
+                console.log(response.data.data)
+                setAttendanceRecords(response.data.data);
+            } catch (err) {
+                console.error(err)
+                const allMembers = Object.values(meetingData.members).flat();
+                setAttendanceRecords(allMembers.map(member => ({
+                    name: member.name,
+                    attendance_status: 'absent',
+                })));
+            }
+        };
+
+        const interval = setInterval(() => {
+            fetchAgenda(),
+                fetchAttendanceData()
+        }, 3000);
+
+        return () => clearInterval(interval);
+    }, []);
 
     const sendTodo = async (pointId, todo, status) => {
         try {
@@ -149,7 +213,6 @@ export default function JoinMeet({ onBack }) {
                 }
             );
 
-            // Update the specific point in state
             setPointData(prevData =>
                 prevData.map(point =>
                     point.pointId === pointId
@@ -185,6 +248,28 @@ export default function JoinMeet({ onBack }) {
         }
     };
 
+    const joinMeeting = async (status) => {
+        try {
+            const meetingId = meetingData.id;
+            const token = localStorage.getItem('token');
+            const sentobj = { meetingId, status };
+
+            const response = await axios.post(
+                'http://localhost:5000/api/meetings/respond',
+                sentobj,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                }
+            );
+
+            setIsAccept(status === 'accept');
+        } catch (err) {
+            console.log(err);
+        }
+    };
+
     const setMeetingState = async () => {
         try {
             const token = localStorage.getItem('token');
@@ -198,8 +283,13 @@ export default function JoinMeet({ onBack }) {
                 }
             );
 
+            console.log(response.data)
+
             if (response.data.accepted_status === 'accept') {
                 setIsAccept(true);
+            }
+            else if (response.data.accepted_status === 'joined') {
+                setOnJoin(true);
             }
         } catch (error) {
             console.error("Error getting meeting state:", error);
@@ -255,6 +345,27 @@ export default function JoinMeet({ onBack }) {
             )
         );
     };
+
+    const startMeeting = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.get(`http://localhost:5000/api/meetings/meeting/${meetingData.id}`, {
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
+            });
+
+            if (response.data.meeting_status == 'not_started') {
+                alert('meeting not started')
+            }
+            else if (response.data.meeting_status == 'in_progress') {
+                joinMeeting('joined')
+                isAccpet && setOnJoin(true)
+            }
+        } catch (error) {
+            console.error('Error fetching meeting:', error.response?.data || error.message);
+        }
+    }
 
     console.log(pointData)
 
@@ -318,7 +429,8 @@ export default function JoinMeet({ onBack }) {
                                     gap: "5px",
                                     "&:hover": { backgroundColor: isAccpet ? "#0069d9" : "#d3d3d3" },
                                 }}
-                                onClick={() => isAccpet && setOnJoin(true)}
+
+                                onClick={() => { startMeeting() }}
                                 disabled={!isAccpet}
                             >
                                 <AutoAwesomeOutlinedIcon sx={{ fontSize: "18px" }} />
@@ -330,7 +442,10 @@ export default function JoinMeet({ onBack }) {
                             <Button
                                 variant="contained"
                                 sx={{ width: '100%', backgroundColor: "#FC7A85", textTransform: "none", gap: "5px" }}
-                                onClick={() => setOnJoin(false)}
+                                onClick={() => {
+                                    setOnJoin(false);
+                                    navigate('/dashboard')
+                                }}
                             >
                                 <AutoAwesomeOutlinedIcon sx={{ fontSize: "18px" }} />
                                 Leave Meeting
@@ -543,7 +658,7 @@ export default function JoinMeet({ onBack }) {
                                             variant="standard"
                                             placeholder="Select time"
                                             fullWidth
-                                            value={meetingData.date}
+                                            value={meetingData?.dateText}
                                             InputProps={{ disableUnderline: true }}
                                         />
                                     </TableCell>
@@ -641,32 +756,46 @@ export default function JoinMeet({ onBack }) {
                                     </TableHead>
                                     <TableBody>
                                         {meetingData?.members && Object.entries(meetingData.members).flatMap(([role, members]) =>
-                                            members.map((member, index) => (
-                                                <TableRow key={`${role}-${index}`}>
-                                                    <TableCell sx={{ ...cellStyle, textAlign: "center" }}>{index + 1}</TableCell>
-                                                    <TableCell sx={{ ...cellStyle, textAlign: "center" }}>{member.name}</TableCell>
-                                                    <TableCell sx={{ ...cellStyle, textAlign: "center" }}>{role}</TableCell>
-                                                    <TableCell sx={{ ...cellStyle, textAlign: "center" }}>
-                                                        <Button
-                                                            variant="outlined"
-                                                            sx={{
-                                                                color: "green",
-                                                                borderColor: "green",
-                                                                backgroundColor: "#e6f8e6",
-                                                                textTransform: "none",
-                                                                borderRadius: "14px",
-                                                                padding: "6px 40px",
-                                                                fontSize: '10px',
-                                                                gap: 0.5,
-                                                                "&:hover": { backgroundColor: "#d4edda" },
-                                                            }}
-                                                        >
-                                                            <CheckBoxIcon sx={{ color: "green", fontSize: '10px' }} />
-                                                            Present
-                                                        </Button>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))
+                                            members.map((member, index) => {
+                                                const attendance = attendanceRecords.find(record => record.userId === member.user_id);
+                                                const isPresent = attendance?.attendance_status === 'present';
+
+                                                return (
+                                                    <TableRow key={`${role}-${index}`}>
+                                                        <TableCell sx={{ ...cellStyle, textAlign: "center" }}>{index + 1}</TableCell>
+                                                        <TableCell sx={{ ...cellStyle, textAlign: "center" }}>{member.name}</TableCell>
+                                                        <TableCell sx={{ ...cellStyle, textAlign: "center" }}>{role}</TableCell>
+                                                        <TableCell sx={{ ...cellStyle, textAlign: "center" }}>
+                                                            <Button
+                                                                variant="outlined"
+                                                                sx={{
+                                                                    color: isPresent ? "green" : "red",
+                                                                    borderColor: isPresent ? "green" : "red",
+                                                                    backgroundColor: isPresent ? "#e6f8e6" : "#ffe6e6",
+                                                                    textTransform: "none",
+                                                                    borderRadius: "14px",
+                                                                    padding: "6px 40px",
+                                                                    fontSize: '10px',
+                                                                    gap: 0.5,
+                                                                    "&:hover": { backgroundColor: isPresent ? "#d4edda" : "#f8d7da" },
+                                                                }}
+                                                            >
+                                                                {isPresent ? (
+                                                                    <>
+                                                                        {/* <CheckBoxIcon sx={{ color: "green", fontSize: '10px' }} /> */}
+                                                                        Present
+                                                                    </>
+                                                                ) : (
+                                                                    <>
+                                                                        {/* <IndeterminateCheckBoxIcon sx={{ color: "red", fontSize: '10px' }} /> */}
+                                                                        Absent
+                                                                    </>
+                                                                )}
+                                                            </Button>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                );
+                                            })
                                         )}
                                     </TableBody>
                                 </>
@@ -683,18 +812,60 @@ export default function JoinMeet({ onBack }) {
                                         </TableRow>
                                     </TableHead>
                                     <TableBody>
-                                        {pointData.map((point, index) => (
-                                            <TableRow key={point.pointId}>
-                                                <TableCell sx={{ ...cellStyle, textAlign: "center" }}>{index + 1}</TableCell>
-                                                <TableCell sx={{ ...cellStyle, textAlign: "center" }}>{point.point_name}</TableCell>
-                                                <TableCell sx={{ ...cellStyle, textAlign: "center" }}>{point.remarks || '-'}</TableCell>
-                                                <TableCell sx={{ ...cellStyle, textAlign: "center" }}>
-                                                    {point.status === 'completed' ? '✅ Completed' : point.status === 'notCompleted' ? '❌ Not Completed' : '-'}
-                                                </TableCell>
-                                                <TableCell sx={{ ...cellStyle, textAlign: "center" }}>{point.name || '-'}</TableCell>
-                                                <TableCell sx={{ ...cellStyle, textAlign: "center" }}>{point.deadline || '-'}</TableCell>
-                                            </TableRow>
-                                        ))}
+                                        {pointData.map((point, index) => {
+
+                                            const ForwardPointData = meetingAgenda.find(item => item.id === point.pointId);
+                                            console.log(ForwardPointData)
+                                            if (ForwardPointData?.forward_info.type == 'NIL') {
+                                                ForwardPointData.forward_info.text = ''
+                                            }
+
+                                            return (
+                                                <TableRow key={point.pointId}>
+                                                    <TableCell sx={{ ...cellStyle, textAlign: "center" }}>{index + 1}</TableCell>
+                                                    <TableCell sx={{ ...cellStyle, textAlign: "center" }}>{point.point_name}</TableCell>
+                                                    <TableCell sx={{ ...cellStyle, textAlign: "center" }}>{ForwardPointData?.admin_remarks || '-'}</TableCell>
+                                                    <TableCell sx={{ ...cellStyle, textAlign: "center" }}>
+                                                        <Box
+                                                            sx={{
+                                                                color:
+                                                                    ForwardPointData?.forward_info?.decision === "agree"
+                                                                        ? "green"
+                                                                        : ForwardPointData?.forward_info?.decision === "not agree"
+                                                                            ? "red"
+                                                                            : ForwardPointData?.forward_info?.decision === "forward"
+                                                                                ? "gray"
+                                                                                : "inherit",
+                                                                fontWeight: "bold",
+                                                            }}
+                                                        >
+                                                            {ForwardPointData?.forward_info?.decision || "-"}
+                                                        </Box>
+
+                                                        <Box sx={{ mt: 1 }}>
+                                                            {ForwardPointData?.forward_info?.text?.includes("FORWARDnext") ? (
+                                                                <>
+                                                                    <div>
+                                                                        {
+                                                                            ForwardPointData?.forward_info?.text.split("FORWARDnext")[0]
+                                                                        }
+                                                                    </div>
+                                                                    <div style={{ fontWeight: "bold", color: "gray" }}>
+                                                                        FORWARDnext
+                                                                        {ForwardPointData?.forward_info?.text.split("FORWARDnext")[1]}
+                                                                    </div>
+                                                                </>
+                                                            ) : (
+                                                                <div>{ForwardPointData?.forward_info?.text}</div>
+                                                            )}
+                                                        </Box>
+                                                    </TableCell>
+
+                                                    <TableCell sx={{ ...cellStyle, textAlign: "center" }}>{point.name || '-'}</TableCell>
+                                                    <TableCell sx={{ ...cellStyle, textAlign: "center" }}>{point.point_deadline ? format(new Date(point.point_deadline), 'dd MMM yyyy') : '-'}</TableCell>
+                                                </TableRow>
+                                            )
+                                        })}
                                     </TableBody>
                                 </>
                             ) : (
@@ -799,7 +970,7 @@ export default function JoinMeet({ onBack }) {
                                                         placeholder="Select Date"
                                                         fullWidth
                                                         InputProps={{ disableUnderline: true }}
-                                                        value={point.deadline || ''}
+                                                        value={point.point_deadline ? format(new Date(point.point_deadline), 'dd MMM yyyy') : 'NIL'}
                                                     />
                                                 </TableCell>
                                             </TableRow>

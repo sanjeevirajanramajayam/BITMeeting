@@ -179,12 +179,6 @@ export default function EditPoints({ handleBack }) {
         }))
     );
 
-    // const handleChange = (index, field, value) => {
-    //     const updatedPoints = [...points];
-    //     updatedPoints[index][field] = value;
-    //     setPoints(updatedPoints);
-    // };
-
     const isRejected = (userId) => {
         if (rejectionRecords) {
             return rejectionRecords.some(record => record.user_id === userId);
@@ -195,7 +189,7 @@ export default function EditPoints({ handleBack }) {
     };
 
     const getNonRejectedMembers = () => {
-        const rejectedUserIds = rejectionRecords.map(r => r.user_id);
+        const rejectedUserIds = (rejectionRecords?.map(r => r.user_id) || []);
         return Object.values(meetingData.members)
             .flatMap(roleMembers =>
                 roleMembers.filter(member => !rejectedUserIds.includes(member.user_id))

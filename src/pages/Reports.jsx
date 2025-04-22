@@ -1,52 +1,159 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import '../styles/Reports.css';
 
 export default function Reports() {
     const navigate = useNavigate();
-    const [reports, setReports] = useState([
-        { id: 1, name: 'BOS meeting', category: 'COA', createdBy: 'Olivia Rhye', dateCreated: 'Jan 4, 2024' },
-        { id: 2, name: 'Grievance meeting', category: 'M Team', createdBy: 'Phoenix Baker', dateCreated: 'Jan 4, 2024' },
-        { id: 3, name: 'Academic meeting', category: 'Academic', createdBy: 'Lana Steiner', dateCreated: 'Jan 2, 2024' },
-        { id: 4, name: 'BOS meeting', category: 'COA', createdBy: 'Demi Wilkinson', dateCreated: 'Jan 6, 2024' },
-        { id: 5, name: 'Grievance meeting', category: 'COA', createdBy: 'Candice Wu', dateCreated: 'Jan 8, 2024' },
-        { id: 6, name: 'Academic meeting', category: 'COA', createdBy: 'Natali Craig', dateCreated: 'Jan 6, 2024' },
-        { id: 7, name: 'BOS meeting', category: 'COA', createdBy: 'Drew Cano', dateCreated: 'Jan 4, 2024' },
-    ]);
-
-    const [activeTab, setActiveTab] = useState('View all');
+    const [reports, setReports] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedItems, setSelectedItems] = useState(new Set());
-    const [sortConfig, setSortConfig] = useState({ key: 'category', direction: 'asc' });
-    const [filterOpen, setFilterOpen] = useState(false);
+    const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
     const [categoryFilter, setCategoryFilter] = useState('');
-    const [selectedCategory, setSelectedCategory] = useState('');
+    const [categories, setCategories] = useState([]);
 
-    const categories = [
-        { id: 'COA', label: 'COA', color: '#2563EB' },
-        { id: 'M Team', label: 'Management Team', color: '#059669' },
-        { id: 'Academic', label: 'Academic', color: '#DC2626' }
-    ];
+    useEffect(() => {
+        const fetchReports = async () => {
+            try {
+                setLoading(true);
+                const token = localStorage.getItem('token');
+                const apiUrl = 'http://localhost:5000';
 
-    // Navigation handler
-    const handleBack = () => {
-        navigate(-1);
+                if (!token) {
+                    setError('Authentication required');
+                    setLoading(false);
+                    return;
+                }
+
+                // First get user's meetings
+                const userMeetingsResponse = await axios.get(`${apiUrl}/api/meetings/get-user-meetings`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    }
+                });
+
+                if (!userMeetingsResponse.data?.meetings) {
+                    setReports([]);
+                    setLoading(false);
+                    return;
+                }
+
+                // Get meeting IDs where user is either creator or member
+                const userMeetingIds = userMeetingsResponse.data.meetings.map(meeting => meeting.id);
+
+                // Get completed meetings that user has access to
+                const reportsResponse = await axios.get(`${apiUrl}/api/reports`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    }
+                });
+
+                // Filter reports to only show meetings user has access to
+                const userReports = reportsResponse.data.filter(report =>
+                    userMeetingIds.includes(parseInt(report.id))
+                );
+
+                const validatedReports = userReports.map(report => ({
+                    id: report.id || '',
+                    name: report.name || 'Untitled Meeting',
+                    category: report.category || 'Uncategorized',
+                    createdBy: report.createdBy || 'Unknown',
+                    dateCreated: report.dateCreated || 'No date',
+                    venue: report.venue || 'No venue'
+                }));
+
+                setReports(validatedReports);
+
+                // Extract unique categories
+                const uniqueCategories = [...new Set(validatedReports
+                    .filter(report => report.category)
+                    .map(report => report.category))];
+
+                setCategories(uniqueCategories.map(cat => ({
+                    id: cat,
+                    label: cat,
+                    color: getCategoryColor(cat)
+                })));
+            } catch (err) {
+                console.error('Error fetching reports:', err);
+                setError(err.response?.data?.message || err.message || 'Failed to fetch reports');
+                setReports([]);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchReports();
+
+    }, []);
+
+    const getCategoryColor = (category) => {
+        const categoryColors = {
+            'BOS': '#2563EB',
+            'Department': '#059669',
+            'Academic': '#DC2626'
+        };
+        return categoryColors[category] || '#6B7280';
     };
 
-    // Sort handler
-    const handleSort = (key) => {
-        let direction = 'asc';
-        if (sortConfig.key === key && sortConfig.direction === 'asc') {
-            direction = 'desc';
+    const getCategoryClass = (category) => {
+        switch (category) {
+            case 'Team Meeting':
+                return 'team-meeting';
+            case 'Board Meeting':
+                return 'board-meeting';
+            default:
+                return '';
         }
-        setSortConfig({ key, direction });
     };
 
-    // Selection handlers
+    const filteredReports = useMemo(() => {
+        let filtered = [...reports];
+
+        if (searchTerm) {
+            const searchLower = searchTerm.toLowerCase();
+            filtered = filtered.filter(report =>
+                (report.name?.toLowerCase().includes(searchLower)) ||
+                (report.category?.toLowerCase().includes(searchLower)) ||
+                (report.createdBy?.toLowerCase().includes(searchLower)) ||
+                (report.venue?.toLowerCase().includes(searchLower))
+            );
+        }
+
+        if (categoryFilter) {
+            filtered = filtered.filter(report => report.category === categoryFilter);
+        }
+
+        if (sortConfig.key) {
+            filtered.sort((a, b) => {
+                const aVal = a[sortConfig.key] || '';
+                const bVal = b[sortConfig.key] || '';
+
+                if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+                if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
+
+        return filtered;
+    }, [reports, searchTerm, categoryFilter, sortConfig]);
+
+    const handleSort = (key) => {
+        setSortConfig(current => ({
+            key,
+            direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc'
+        }));
+    };
+
     const handleSelectAll = (event) => {
         if (event.target.checked) {
-            const newSelected = new Set(filteredReports.map(report => report.id));
-            setSelectedItems(newSelected);
+            setSelectedItems(new Set(filteredReports.map(report => report.id)));
         } else {
             setSelectedItems(new Set());
         }
@@ -64,71 +171,13 @@ export default function Reports() {
         });
     };
 
-    // Tab handler
-    const handleTabChange = (tab) => {
-        setActiveTab(tab);
-        if (tab === 'View all') {
-            setCategoryFilter('');
-        }
-    };
-
-    const handleCategoryFilter = (category) => {
-        setSelectedCategory(category);
-        setCategoryFilter(category);
-    };
-
-    const filteredReports = useMemo(() => {
-        let filtered = [...reports];
-
-        if (searchTerm) {
-            filtered = filtered.filter(report =>
-                report.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                report.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                report.createdBy.toLowerCase().includes(searchTerm.toLowerCase())
-            );
-        }
-
-        if (categoryFilter) {
-            filtered = filtered.filter(report => report.category === categoryFilter);
-        }
-
-        if (sortConfig.key) {
-            filtered.sort((a, b) => {
-                if (a[sortConfig.key] < b[sortConfig.key]) {
-                    return sortConfig.direction === 'asc' ? -1 : 1;
-                }
-                if (a[sortConfig.key] > b[sortConfig.key]) {
-                    return sortConfig.direction === 'asc' ? 1 : -1;
-                }
-                return 0;
-            });
-        }
-
-        return filtered;
-    }, [reports, searchTerm, categoryFilter, sortConfig]);
-
-    const getCategoryClass = (category) => {
-        switch(category) {
-            case 'COA':
-                return 'coa';
-            case 'M Team':
-                return 'mteam';
-            case 'Academic':
-                return 'academic';
-            default:
-                return '';
-        }
-    };
-
-    // Add export handling
     const handleExport = () => {
         const selectedReports = filteredReports.filter(report => selectedItems.has(report.id));
         if (selectedReports.length === 0) {
             alert('Please select at least one report to export');
             return;
         }
-        
-        // Add export logic here
+
         const exportData = selectedReports.map(report => ({
             name: report.name,
             category: report.category,
@@ -137,31 +186,40 @@ export default function Reports() {
         }));
 
         console.log('Exporting reports:', exportData);
-        // Implement actual export functionality
         alert(`Exporting ${selectedReports.length} reports`);
     };
 
+    const handleViewReport = (report) => {
+        // Navigate to the detailed report view page
+        navigate(`/reports/${report.id}`);
+    };
+
+    const handlePrint = () => {
+        window.print();
+    };
+
+    if (loading) {
+        return <div className="loading">Loading reports...</div>;
+    }
+
     return (
         <div className="reports-container">
-            {/* Header */}
             <div className="reports-main-header">
                 <div className="back-button-container">
-                    <button className="back-button" onClick={handleBack}>
+                    <button className="back-button" onClick={() => navigate(-1)}>
                         <i className="fi fi-rr-arrow-left"></i>
                     </button>
                     <h1 className="page-title">Meeting Reports</h1>
                 </div>
             </div>
 
-            {/* Main Content */}
             <div className="reports-content">
-                {/* Reports header with Export button */}
                 <div className="reports-header">
                     <div className="reports-title">
                         <h2>Reports</h2>
-                        <span className="reports-subtitle">Keep track of meeting reports</span>
+                        <span className="reports-subtitle">Completed Meetings</span>
                     </div>
-                    <button 
+                    <button
                         className={`reports-btn secondary ${selectedItems.size === 0 ? 'disabled' : ''}`}
                         onClick={handleExport}
                         disabled={selectedItems.size === 0}
@@ -171,39 +229,40 @@ export default function Reports() {
                     </button>
                 </div>
 
-                {/* Filter Section */}
                 <div className="reports-filter-section">
                     <div className="reports-filter-buttons">
-                        <button 
+                        <button
                             className={`reports-btn ${!categoryFilter ? 'secondary active' : 'secondary'}`}
                             onClick={() => setCategoryFilter('')}
+                            type="button"
                         >
                             View all
                         </button>
-                        <select 
+                        <select
                             className="reports-dropdown"
                             value={categoryFilter}
                             onChange={(e) => setCategoryFilter(e.target.value)}
+                            autoComplete="off"
                         >
-                            <option value="">Category: All</option>
-                            <option value="COA">COA</option>
-                            <option value="M Team">M Team</option>
-                            <option value="Academic">Academic</option>
+                            <option value="">All Categories</option>
+                            {categories.map(cat => (
+                                <option key={cat.id} value={cat.id}>{cat.label}</option>
+                            ))}
                         </select>
                     </div>
                     <div className="reports-search">
                         <i className="fi fi-rr-search reports-search-icon"></i>
-                        <input 
-                            type="text" 
-                            placeholder="Search reports..." 
+                        <input
+                            type="search"
+                            placeholder="Search reports..."
                             className="reports-search-input"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
+                            autoComplete="off"
                         />
                     </div>
                 </div>
 
-                {/* Table */}
                 <div className="table-container">
                     <table className="reports-table">
                         <thead>
@@ -213,46 +272,63 @@ export default function Reports() {
                                         type="checkbox"
                                         onChange={handleSelectAll}
                                         checked={selectedItems.size === filteredReports.length && filteredReports.length > 0}
+                                        autoComplete="off"
                                     />
                                 </th>
-                                <th>File name</th>
-                                <th onClick={() => handleSort('category')}>
-                                    Category
-                                    {sortConfig.key === 'category' && (
-                                        <i className={`fi fi-rr-${sortConfig.direction === 'asc' ? 'arrow-down' : 'arrow-up'} sort-icon`}></i>
-                                    )}
-                                </th>
+                                <th>Meeting Title</th>
+                                <th onClick={() => handleSort('category')}>Category</th>
                                 <th>Created by</th>
-                                <th>Date created</th>
+                                <th onClick={() => handleSort('dateCreated')}>Date</th>
+                                <th>Venue</th>
                                 <th>Report</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredReports.map((report) => (
-                                <tr key={report.id}>
-                                    <td>
-                                        <input
-                                            type="checkbox"
-                                            checked={selectedItems.has(report.id)}
-                                            onChange={() => handleSelectItem(report.id)}
-                                        />
-                                    </td>
-                                    <td>{report.name}</td>
-                                    <td>
-                                        <span className={`category-badge ${getCategoryClass(report.category)}`}>
-                                            {report.category}
-                                        </span>
-                                    </td>
-                                    <td>{report.createdBy}</td>
-                                    <td>{report.dateCreated}</td>
-                                    <td>
-                                        <a href="#" className="download-link" onClick={(e) => {
-                                            e.preventDefault();
-                                            alert('Download functionality not implemented');
-                                        }}>Download</a>
+                            {filteredReports.length === 0 ? (
+                                <tr>
+                                    <td colSpan="7" className="no-data">
+                                        {error || 'No completed meetings found'}
                                     </td>
                                 </tr>
-                            ))}
+                            ) : (
+                                filteredReports.map((report) => (
+                                    <tr
+                                        key={`report-${report.id}`}
+                                        className="report-row"
+                                        onClick={(e) => {
+                                            // Prevent opening report if clicking on checkbox or View Report button
+                                            if (!e.target.closest('input[type="checkbox"]') &&
+                                                !e.target.closest('.download-link')) {
+                                                handleViewReport(report);
+                                            }
+                                        }}
+                                    >
+                                        <td>
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedItems.has(report.id)}
+                                                onChange={() => handleSelectItem(report.id)}
+                                                autoComplete="off"
+                                            />
+                                        </td>
+                                        <td>{report.name}</td>
+                                        <td>
+                                            <span className={`category-badge ${getCategoryClass(report.category)}`}>
+                                                {report.category}
+                                            </span>
+                                        </td>
+                                        <td>{report.createdBy}</td>
+                                        <td>{report.dateCreated}</td>
+                                        <td>{report.venue}</td>
+                                        <td>
+                                            <a href="#" className="download-link" onClick={(e) => {
+                                                e.preventDefault();
+                                                handleViewReport(report);
+                                            }}>Download</a>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
                         </tbody>
                     </table>
 
