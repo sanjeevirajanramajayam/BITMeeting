@@ -2,6 +2,10 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import '../styles/Reports.css';
+import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
+import { formatInTimeZone } from 'date-fns-tz';
+import image from "../assets/bannariammanheader.png";
 
 export default function Reports() {
     const navigate = useNavigate();
@@ -198,6 +202,149 @@ export default function Reports() {
         window.print();
     };
 
+    const handleDownloadPDF = async (report) => {
+        try {
+            const token = localStorage.getItem('token');
+            const apiUrl = 'http://localhost:5000';
+
+            // Fetch detailed report data
+            const response = await axios.get(`${apiUrl}/api/meetings/meeting/${report.id}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                }
+            });
+
+            const meetingData = response.data;
+            const agendaResponse = await axios.get(`${apiUrl}/api/meetings/get-meeting-agenda/${report.id}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                }
+            });
+
+            // Create a temporary div to hold the PDF content
+            const tempDiv = document.createElement('div');
+            tempDiv.style.padding = '20px';
+            tempDiv.style.backgroundColor = 'white';
+            tempDiv.style.width = '210mm'; // A4 width
+            tempDiv.style.minHeight = '297mm'; // A4 height
+
+            // Add content to the temporary div matching MeetingReportView layout
+            tempDiv.innerHTML = `
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <img src="${image}" alt="College Header" style="width: 100%; height: auto; max-width: 100%;" />
+                </div>
+
+                <div style="margin: 20px 0;">
+                    <h1 style="text-align: center; margin-bottom: 10px;">${meetingData.meeting_name}</h1>
+                    <p style="text-align: center; color: #666;">${meetingData.venue_name} • ${formatInTimeZone(meetingData.start_time, 'UTC', 'dd/MM/yyyy')} | ${formatInTimeZone(meetingData.start_time, 'UTC', 'hh:mm a')} - ${formatInTimeZone(meetingData.end_time, 'UTC', 'hh:mm a')}</p>
+                </div>
+
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                    <tbody>
+                        <tr>
+                            <td style="padding: 12px 16px; border: 1px solid #ddd;">Name of the Meeting</td>
+                            <td style="padding: 12px 16px; border: 1px solid #ddd;">${meetingData.meeting_name}</td>
+                            <td style="padding: 12px 16px; border: 1px solid #ddd; background-color: #E7E7E7; color: #777;">Reference Number</td>
+                            <td style="padding: 12px 16px; border: 1px solid #ddd; background-color: #E7E7E7;">MEETING-${meetingData.id}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 12px 16px; border: 1px solid #ddd;">Meeting Description</td>
+                            <td colspan="3" style="padding: 12px 16px; border: 1px solid #ddd;">${meetingData.meeting_description || '-'}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 12px 16px; border: 1px solid #ddd;">Repeat Type</td>
+                            <td style="padding: 12px 16px; border: 1px solid #ddd;">${meetingData.repeat_type || 'One-time'}</td>
+                            <td style="padding: 12px 16px; border: 1px solid #ddd;">Priority Type</td>
+                            <td style="padding: 12px 16px; border: 1px solid #ddd;">${meetingData.priority?.toUpperCase() || 'NORMAL'}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 12px 16px; border: 1px solid #ddd;">Venue Details</td>
+                            <td style="padding: 12px 16px; border: 1px solid #ddd;">${meetingData.venue_name || '-'}</td>
+                            <td style="padding: 12px 16px; border: 1px solid #ddd;">Date & Time</td>
+                            <td style="padding: 12px 16px; border: 1px solid #ddd;">${formatInTimeZone(meetingData.start_time, 'UTC', 'dd/MM/yyyy')} | ${formatInTimeZone(meetingData.start_time, 'UTC', 'hh:mm a')} - ${formatInTimeZone(meetingData.end_time, 'UTC', 'hh:mm a')}</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                    <thead>
+                        <tr style="background-color: #f0f0f0;">
+                            <th style="padding: 12px 16px; border: 1px solid #ddd; text-align: left;">S.No</th>
+                            <th style="padding: 12px 16px; border: 1px solid #ddd; text-align: left;">Points to be Discussed</th>
+                            <th style="padding: 12px 16px; border: 1px solid #ddd; text-align: left;">Remarks</th>
+                            <th style="padding: 12px 16px; border: 1px solid #ddd; text-align: left;">Status</th>
+                            <th style="padding: 12px 16px; border: 1px solid #ddd; text-align: left;">Responsibility</th>
+                            <th style="padding: 12px 16px; border: 1px solid #ddd; text-align: left;">Deadline</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${(agendaResponse.data.data.points || []).map((point, index) => `
+                            <tr>
+                                <td style="padding: 12px 16px; border: 1px solid #ddd;">${point?.id || (index + 1)}</td>
+                                <td style="padding: 12px 16px; border: 1px solid #ddd;">
+                                    <div style="font-weight: 500;">${point?.point_name || '-'}</div>
+                                    ${point?.description ? `<div style="color: #666; font-style: italic; margin-top: 5px;">${point.description}</div>` : ''}
+                                </td>
+                                <td style="padding: 12px 16px; border: 1px solid #ddd;">${point?.admin_remarks || '-'}</td>
+                                <td style="padding: 12px 16px; border: 1px solid #ddd;">
+                                    <div style="color: ${point?.status === 'APPROVED' ? '#059669' : '#d97706'}; font-weight: 500;">
+                                        ${point?.status || '-'}
+                                    </div>
+                                    ${point?.forward_info ? `
+                                        <div style="color: #2563eb; font-size: 14px;">
+                                            Forward to: ${point.forward_info.text}
+                                        </div>
+                                    ` : ''}
+                                </td>
+                                <td style="padding: 12px 16px; border: 1px solid #ddd;">${point?.responsible_user?.name || '-'}</td>
+                                <td style="padding: 12px 16px; border: 1px solid #ddd;">${point?.deadline || '-'}</td>
+                            </tr>
+                        `).join('')}
+                        ${(!agendaResponse.data.data.points || agendaResponse.data.data.points.length === 0) ? `
+                            <tr>
+                                <td colspan="6" style="padding: 12px 16px; border: 1px solid #ddd; text-align: center;">
+                                    No points discussed
+                                </td>
+                            </tr>
+                        ` : ''}
+                    </tbody>
+                </table>
+            `;
+
+            // Add the temporary div to the document
+            document.body.appendChild(tempDiv);
+
+            // Convert to PDF
+            const canvas = await html2canvas(tempDiv, {
+                scale: 2,
+                useCORS: true,
+                logging: false,
+                allowTaint: true
+            });
+
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF({
+                orientation: 'portrait',
+                unit: 'mm',
+                format: 'a4'
+            });
+
+            const imgWidth = 210; // A4 width in mm
+            const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+            pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+            pdf.save(`${report.name.replace(/\s+/g, '_')}_Meeting_Report.pdf`);
+
+            // Remove the temporary div
+            document.body.removeChild(tempDiv);
+        } catch (error) {
+            console.error('Error generating PDF:', error);
+            alert('Failed to generate PDF. Please try again.');
+        }
+    };
+
     if (loading) {
         return <div className="loading">Loading reports...</div>;
     }
@@ -323,7 +470,7 @@ export default function Reports() {
                                         <td>
                                             <a href="#" className="download-link" onClick={(e) => {
                                                 e.preventDefault();
-                                                handleViewReport(report);
+                                                handleDownloadPDF(report);
                                             }}>Download</a>
                                         </td>
                                     </tr>

@@ -8,7 +8,6 @@ import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import CloseIcon from "@mui/icons-material/Close";
 import VerticalAlignBottomIcon from '@mui/icons-material/VerticalAlignBottom';
-import AutorenewIcon from '@mui/icons-material/Autorenew';
 import { useNavigate, useLocation } from "react-router-dom";
 import { MdDragIndicator } from "react-icons/md";
 import { FiTrash2 } from "react-icons/fi";
@@ -26,12 +25,12 @@ const Submit = () => {
   return (
     <Card sx={{ borderRadius: "12px", boxShadow: "0px 2px 8px rgba(0, 0, 0, 0.1)", maxWidth: 400, padding: "16px" }}>
       <img src={crt} alt="Success" style={{ width: 50, height: 50 }} />
-        <Typography sx={{ fontWeight: "bold", fontSize: "18px", marginTop: '10px' }}>
-          Meeting initiated
-        </Typography>
-        <Typography sx={{ color: "#64748B", fontSize: "16px", marginTop: '15px' }}>
-          Created successfully members got notified the meeting.
-        </Typography>
+      <Typography sx={{ fontWeight: "bold", fontSize: "18px", marginTop: '10px' }}>
+        Meeting initiated
+      </Typography>
+      <Typography sx={{ color: "#64748B", fontSize: "16px", marginTop: '15px' }}>
+        Created successfully members got notified the meeting.
+      </Typography>
     </Card>
   );
 };
@@ -43,6 +42,7 @@ export default function Cmeeting({ onBack }) {
   const [loading, setLoading] = useState(false);
   const [selectedMeeting, setSelectedMeeting] = useState("");
   const [meetingDescription, setMeetingDescription] = useState("");
+  const [forwardedPoints, setForwardedPoints] = useState([]);
 
   useEffect(() => {
     const templateData = location.state?.selectedTemplate;
@@ -55,6 +55,28 @@ export default function Cmeeting({ onBack }) {
         setSelectedMeeting(templateData.name);
       }
     }
+    console.log(templateData)
+    const fetchForwardedPoints = async () => {
+      var token = localStorage.getItem('token')
+      try {
+        const response = await axios.post(
+          `http://localhost:5000/api/meetings/get-forwarded-points/`
+          , {
+            templateId: templateData.backendId
+          }, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          }
+        });
+        //setMeetingAgenda(response.data.data.points);
+        console.log("sdfdsf", response.data)
+        setForwardedPoints(response.data.points)
+      } catch (err) {
+        console.error(err)
+      }
+    };
+
+    fetchForwardedPoints();
   }, [location.state]);
 
   const handleBack = () => {
@@ -528,7 +550,7 @@ export default function Cmeeting({ onBack }) {
       },
       option: {
         display: 'flex',
-        flexDirection: 'column', 
+        flexDirection: 'column',
         gap: '2px'
       }
     }
@@ -704,7 +726,43 @@ export default function Cmeeting({ onBack }) {
     }
   };
 
-  console.log(discussionPoints  );
+
+  const handleApprove = async (pointId, isApproved) => {
+    if (isApproved) {
+      // Handle approval: update backend and mark approved in UI
+      console.log("Approving point:", pointId);
+      const token = localStorage.getItem('token');
+  
+      try {
+        const response = await axios.post(
+          `http://localhost:5000/api/meetings/forward-point-approve/`,
+          { pointId },
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            }
+          }
+        );
+        console.log("Approval Response:", response.data);
+  
+        // Mark the point as approved (make button green)
+        setForwardedPoints(prev =>
+          prev.map(point =>
+            point.point_id === pointId ? { ...point, approved: true } : point
+          )
+        );
+      } catch (err) {
+        console.error("Approval Error:", err);
+      }
+  
+    } else {
+      // Remove the point if not approved
+      console.log("Removing point (Not Approved):", pointId);
+      setForwardedPoints(prev => prev.filter(point => point.point_id !== pointId));
+    }
+  };
+  
+
 
   return (
     <Box>
@@ -750,7 +808,7 @@ export default function Cmeeting({ onBack }) {
                   backgroundColor: "#6c757d", textTransform: "none", gap: "5px",
                   "&:hover": { backgroundColor: "#5a6268" },
                 }}
-                onClick={() => {console.log("Save as Draft")}}
+                onClick={() => { console.log("Save as Draft") }}
               >
                 <DescriptionOutlinedIcon sx={{ fontSize: "18px" }} />
                 Save as Draft
@@ -1306,6 +1364,49 @@ export default function Cmeeting({ onBack }) {
             </TableContainer>
           </>
         )}
+
+        {forwardedPoints.length > 0 && (
+          <TableContainer sx={{ border: "1px solid #ddd" }}>
+            <Table sx={{ borderCollapse: "collapse" }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={headerCellStyle}>Point Name</TableCell>
+                  <TableCell sx={headerCellStyle}>Forward Type</TableCell>
+                  <TableCell sx={headerCellStyle}>Forward Decision</TableCell>
+                  <TableCell sx={headerCellStyle}>Approve Point</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {forwardedPoints.map((point, index) => (
+                  <TableRow key={point.point_id}>
+                    <TableCell sx={cellStyle}>{point.point_name}</TableCell>
+                    <TableCell sx={cellStyle}>{point.forward_type}</TableCell>
+                    <TableCell sx={cellStyle}>{point.forward_decision}</TableCell>
+                    <TableCell sx={cellStyle}>
+                      <Box sx={{ display: "flex", gap: 1 }}>
+                        <Button
+                          variant="outlined"
+                          color={point.approved ? "success" : "primary"}
+                          onClick={() => handleApprove(point.point_id, true)}
+                        >
+                          Approve
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          color="error"
+                          onClick={() => handleApprove(point.point_id, false)}
+                        >
+                          Not Approve
+                        </Button>
+                      </Box>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
+
 
       </Box>
 

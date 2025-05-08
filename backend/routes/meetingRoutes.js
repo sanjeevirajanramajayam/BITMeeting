@@ -26,7 +26,8 @@ const {
     getUserMeetingResponse,
     getMeetingStatus,
     updatePoint,
-    getForwardedPoints
+    getForwardedPoints,
+    approvePointForForwarding
 } = require('../controllers/meetingController');
 
 router.post('/create', verifyToken, createMeeting)
@@ -54,7 +55,6 @@ router.post('/get-response', verifyToken, getUserMeetingResponse)
 router.get('/get-meeting-status/:meetingId', verifyToken, getMeetingStatus)
 router.post('/update-point', verifyToken, updatePoint)
 router.post('/get-forwarded-points', verifyToken, getForwardedPoints)
-
-
+router.post('/forward-point-approve', verifyToken, approvePointForForwarding)
 
 module.exports = router;

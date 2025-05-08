@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
     Box,
@@ -18,8 +18,8 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import DownloadIcon from '@mui/icons-material/Download';
 import axios from 'axios';
 import { formatInTimeZone } from 'date-fns-tz';
-
-
+import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 import { format } from 'date-fns';
 
 // Import the header image directly from assets
@@ -58,6 +58,7 @@ export default function MeetingReportView() {
     const [report, setReport] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const pdfRef = useRef();
 
     useEffect(() => {
         const fetchReport = async () => {
@@ -194,6 +195,29 @@ export default function MeetingReportView() {
         window.print();
     };
 
+    const handleDownloadPDF = async () => {
+        const element = pdfRef.current;
+        const canvas = await html2canvas(element, {
+            scale: 2,
+            useCORS: true,
+            logging: false,
+            allowTaint: true
+        });
+
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jsPDF({
+            orientation: 'portrait',
+            unit: 'mm',
+            format: 'a4'
+        });
+
+        const imgWidth = 210; // A4 width in mm
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+        pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+        pdf.save(`${report.name.replace(/\s+/g, '_')}_Meeting_Report.pdf`);
+    };
+
     return (
         <Container maxWidth="lg" sx={{ py: 3 }}>
             {/* Header with back button and download */}
@@ -220,7 +244,7 @@ export default function MeetingReportView() {
                 <Button
                     variant="contained"
                     startIcon={<DownloadIcon />}
-                    onClick={handlePrint}
+                    onClick={handleDownloadPDF}
                     sx={{
                         backgroundColor: '#1565c0',
                         '&:hover': { backgroundColor: '#0d47a1' },
@@ -236,6 +260,7 @@ export default function MeetingReportView() {
 
             {/* Main content */}
             <Paper
+                ref={pdfRef}
                 sx={{
                     p: { xs: 2, md: 4 },
                     mb: 3,
@@ -319,8 +344,8 @@ export default function MeetingReportView() {
 
                         <TableBody>
                             {(report.points || []).map((point, index) => (
-                                <TableRow key={point?.id || index}>
-                                    <TableCell sx={cellStyle}>{point?.id || (index + 1)}</TableCell>
+                                <TableRow key={ index}>
+                                    <TableCell sx={cellStyle}>{ (index + 1)}</TableCell>
                                     <TableCell sx={{ ...cellStyle, fontWeight: "normal", maxWidth: "300px" }}>
                                         <Typography sx={{ fontWeight: "medium" }}>
                                             {point?.point_name || '-'}
@@ -348,8 +373,8 @@ export default function MeetingReportView() {
                                             )}
                                         </Box>
                                     </TableCell>
-                                    <TableCell sx={cellStyle}>{point?.responsible_user.name || '-'}</TableCell>
-                                    <TableCell sx={cellStyle}>{point?.deadline || '-'}</TableCell>
+                                    <TableCell sx={cellStyle}>{point?.responsible_user?.name || '-'}</TableCell>
+                                    <TableCell sx={cellStyle}>{point.point_deadline ? format(new Date(point.point_deadline), 'dd MMM yyyy') : '-'}</TableCell>
                                 </TableRow>
                             ))}
                             {(!report.points || report.points.length === 0) && (

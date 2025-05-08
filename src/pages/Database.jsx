@@ -18,6 +18,8 @@ export default function Template() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [deletingTemplateId, setDeletingTemplateId] = useState(null);
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 5;
     const navigate = useNavigate();
 
     // Function to fetch templates from API
@@ -311,6 +313,27 @@ export default function Template() {
         return filtered;
     }, [templates, searchTerm, statusFilter, categoryFilter, sortConfig]);
 
+    // Add these pagination functions before the return statement
+    const handleNextPage = () => {
+        const totalPages = Math.ceil(filteredTemplates.length / itemsPerPage);
+        if (currentPage < totalPages) {
+            setCurrentPage(currentPage + 1);
+        }
+    };
+
+    const handlePreviousPage = () => {
+        if (currentPage > 1) {
+            setCurrentPage(currentPage - 1);
+        }
+    };
+
+    // Modify the filteredTemplates to include pagination
+    const paginatedTemplates = useMemo(() => {
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        const endIndex = startIndex + itemsPerPage;
+        return filteredTemplates.slice(startIndex, endIndex);
+    }, [filteredTemplates, currentPage]);
+
     const openModal = () => {
         // Reset selected category when opening the modal
         setSelectedCategory('');
@@ -530,8 +553,8 @@ export default function Template() {
 
     return (
         <div className="db-container">
-            {/* Navigation */}
-            <nav className="db-nav">
+
+            {/* <nav className="db-nav">
                 <div className={`db-nav-item ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>
                     <i className="fi fi-rr-users"></i>
                     <span>Users</span>
@@ -544,26 +567,17 @@ export default function Template() {
                     <i className="fi fi-rr-building"></i>
                     <span>Infrastructure</span>
                 </div>
-                <div className={`db-nav-item ${activeTab === 'templates' ? 'active' : ''}`} onClick={() => setActiveTab('templates')}>
-                    <i className="fi fi-rr-file"></i>
-                    <span>Templates</span>
-                </div>
-            </nav>
+            </nav>  */}
 
             {/* Main Content */}
             <div className="db-content">
-                {activeTab === 'templates' && (
-                    <>
                         <div className="db-header">
                             <div className="db-header-title">
                                 <h1>Template list</h1>
                                 <p className="db-header-subtitle">Keep track of templates and their datas.</p>
                             </div>
                             <div className="db-header-buttons">
-                                <button className="db-button secondary">
-                                    <i className="fi fi-rr-download"></i>
-                                    <span>Import</span>
-                                </button>
+                                
                                 <button className="db-button primary" onClick={openModal}>
                                     <i className="fi fi-rr-plus"></i>
                                     <span>Add Template</span>
@@ -669,7 +683,7 @@ export default function Template() {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {filteredTemplates.map((template) => (
+                                            {paginatedTemplates.map((template) => (
                                                 <tr key={template.id}>
                                                     <td>
                                                         <input
@@ -754,10 +768,24 @@ export default function Template() {
                                         </tbody>
                                     </table>
                                     <div className="db-pagination">
-                                        <div className="db-pagination-info">Page 1 of 10</div>
+                                        <div className="db-pagination-info">
+                                            Page {currentPage} of {Math.ceil(filteredTemplates.length / itemsPerPage)}
+                                        </div>
                                         <div className="db-pagination-buttons">
-                                            <button className="db-button">Previous</button>
-                                            <button className="db-button">Next</button>
+                                            <button 
+                                                className="db-button" 
+                                                onClick={handlePreviousPage}
+                                                disabled={currentPage === 1}
+                                            >
+                                                Previous
+                                            </button>
+                                            <button 
+                                                className="db-button" 
+                                                onClick={handleNextPage}
+                                                disabled={currentPage >= Math.ceil(filteredTemplates.length / itemsPerPage)}
+                                            >
+                                                Next
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
@@ -783,8 +811,6 @@ export default function Template() {
                                 </div>
                             </div>
                         )}
-                    </>
-                )}
             </div>
 
             {isModalOpen && (

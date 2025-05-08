@@ -5,6 +5,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import AttendanceIcon from "@mui/icons-material/HowToReg";
 import AgendaIcon from "@mui/icons-material/Groups";
 import ForwardingForm from "./MeetingPage2";
@@ -14,6 +15,8 @@ import { useLocation } from 'react-router-dom';
 import axios, { all } from "axios";
 import Reason from "../components/ViewReason";
 import { format } from "date-fns";
+import DatePick from "../components/date";
+
 
 const cellStyle = {
     border: "1px solid #ddd",
@@ -62,6 +65,8 @@ export default function StartMeet({ handleBack }) {
     const [rejectionRecords, setRejectionRecords] = useState([]);
     const [selectedPoint, setSelectedPoint] = useState(null);
     const [meetingAgenda, setMeetingAgenda] = useState([]);
+    const [openDateIndex, setOpenDateIndex] = useState(null);
+    const [selectedDate, setSelectedDate] = useState({});
 
     const [points, setPoints] = useState(
         meetingData.points.map(point => ({
@@ -126,6 +131,12 @@ export default function StartMeet({ handleBack }) {
         setPoints(updatedPoints);
     };
 
+    const handleAddTopic = () => {
+        const newId = String(points.length + 1).padStart(2, "0");
+        const newPoint = { meetingId: meetingData.id };
+
+        setPoints([...points, newPoint]);
+    };
 
     const handleAttendanceChange = (name, newStatus) => {
         setAttendanceRecords(prevRecords =>
@@ -133,6 +144,76 @@ export default function StartMeet({ handleBack }) {
                 record.name === name ? { ...record, attendance_status: newStatus } : record
             )
         );
+    };
+
+    const handleDateConfirm = (date, index) => {
+        const formattedDate = date.format("YYYY-MM-DD");
+        setSelectedDate((prev) => ({ ...prev, [index]: formattedDate }));
+
+        // Update the points state with the new deadline
+        setPoints(prevPoints => {
+            const updatedPoints = [...prevPoints];
+            updatedPoints[index] = {
+                ...updatedPoints[index],
+                point_deadline: formattedDate
+            };
+            return updatedPoints;
+        });
+
+        setOpenDateIndex(null);
+    };
+
+    const allMembers = Object.values(meetingData.members).flatMap(roleMembers =>
+        roleMembers.map(member => ({
+            id: member.user_id,
+            name: member.name
+        }))
+    );
+
+    const submitPoints = async () => {
+        const token = localStorage.getItem("token");
+
+        if (!token) {
+            console.error("No auth token found in localStorage");
+            return;
+        }
+
+        const formatMySQLDateTime = (date) => {
+            if (!date) return null;
+            return new Date(date).toISOString().slice(0, 19).replace('T', ' ');
+        };
+
+        const updatedPoints = points.map(point => ({
+            ...point,
+        }));
+
+        console.log(updatedPoints)
+
+        const promises = updatedPoints.map((point) => {
+            axios.post("http://localhost:5000/api/meetings/update-point", point, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            }).then((response) => {
+                if (!point.point_id) {
+                    point.point_id = response.data.point_id
+                }
+            })
+        });
+        setPoints(updatedPoints)
+        await Promise.all(promises);
+    };
+
+    const getNonRejectedMembers = () => {
+        const rejectedUserIds = (rejectionRecords?.map(r => r.user_id) || []);
+        return Object.values(meetingData.members)
+            .flatMap(roleMembers =>
+                roleMembers.filter(member => !rejectedUserIds.includes(member.user_id))
+            )
+            .map(member => ({
+                id: member.user_id,
+                name: member.name
+            }));
     };
 
     const markAttendance = async (userId, status) => {
@@ -260,7 +341,7 @@ export default function StartMeet({ handleBack }) {
         }
         if (flag == 0) {
 
-            const response = await axios.post(`http://localhost:5000/api/meetings/start-meeting/`, { meetingId: id }, {
+            const response = await axios.post(` http://localhost:5000/api/meetings/start-meeting/`, { meetingId: id }, {
                 headers: {
                     Authorization: `Bearer ${token}`,
                 }
@@ -282,9 +363,7 @@ export default function StartMeet({ handleBack }) {
             point => point.forward_info && typeof point.forward_info.type !== "undefined"
         );
         const allHaveDecisionStatus = points.every(p => p.DecisionStatus !== undefined);
-        console.log(meetingAgenda)
         var id = meetingData.id;
-        console.log(allHaveForwardType)
         var token = localStorage.getItem('token')
         if (allHaveForwardType || allHaveDecisionStatus) {
 
@@ -294,7 +373,7 @@ export default function StartMeet({ handleBack }) {
                     Authorization: `Bearer ${token}`,
                 }
             })
-            //navigate(`/reports/${meetingData.id}`)
+            navigate(`/reports/${meetingData.id}`)
         }
         else {
             alert('Fill in all points!')
@@ -693,183 +772,236 @@ export default function StartMeet({ handleBack }) {
                                     };
 
                                     return (
-                                        <TableRow key={index}>
-                                            <TableCell sx={{ ...mergedCellStyle, textAlign: "center" }}>{index + 1}</TableCell>
-                                            <TableCell sx={{ ...mergedCellStyle, fontWeight: "normal", maxWidth: "300px" }}>
-                                                <TextField
-                                                    variant="standard"
-                                                    placeholder="Enter discussion topic"
-                                                    multiline
-                                                    fullWidth
-                                                    minRows={1}
-                                                    maxRows={4}
-                                                    value={point.point_name}
-                                                    InputProps={{
-                                                        disableUnderline: true,
-                                                        sx: { fontSize: '14px', fontWeight: 'bold' }
-                                                    }}
-                                                    onChange={(e) => handleChange(index, 'point_name', e.target.value)}
-                                                />
-                                            </TableCell>
-                                            <TableCell sx={mergedCellStyle}>
-                                                <TextField
-                                                    variant="standard"
-                                                    placeholder="Add remarks"
-                                                    fullWidth
-                                                    defaultValue={point.remarks_by_admin}
-                                                    onChange={(e) => handleChange(index, 'remarks_by_admin', e.target.value)}
-                                                    InputProps={{ disableUnderline: true }}
-                                                />
-                                            </TableCell>
-
-                                            <TableCell sx={{ ...cellStyle, textAlign: "center" }}>
-                                                <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 1, alignItems: 'center' }}>
-                                                    {point.DecisionStatus !== "DISAGREE" && point.DecisionStatus !== "FORWARD" && (
-                                                        <Button
-                                                            variant="outlined"
-                                                            sx={{
-                                                                width: '100px',
-                                                                color: "green",
-                                                                borderColor: "green",
-                                                                backgroundColor: "#e6f8e6",
-                                                                textTransform: "none",
-                                                                borderRadius: "14px",
-                                                                fontSize: '10px',
-                                                                gap: 0.5,
-                                                                "&:hover": {
-                                                                    backgroundColor: "#d4edda",
-                                                                },
-                                                            }}
-                                                            onClick={() => {
-                                                                var updatedPoint = point;
-                                                                updatedPoint.DecisionIndex = index;
-                                                                setSelectedPoint(updatedPoint);
-                                                                handleForwardClick("AGREE")
-
-                                                                //handleChangeStatus(index, "AGREE");
-                                                            }}
-                                                        >
-                                                            Agree
-                                                        </Button>
-                                                    )}
-                                                    {point.DecisionStatus !== "DISAGREE" && point.DecisionStatus !== "AGREE" && (
-                                                        <Button
-                                                            variant="outlined"
-                                                            sx={{
-                                                                width: '100px',
-                                                                color: "black",
-                                                                borderColor: "black",
-                                                                backgroundColor: "#D8DEE2",
-                                                                textTransform: "none",
-                                                                borderRadius: "14px",
-                                                                fontSize: '10px',
-                                                                gap: 0.5,
-                                                            }}
-                                                            onClick={() => {
-                                                                var updatedPoint = point;
-                                                                updatedPoint.DecisionIndex = index;
-                                                                setSelectedPoint(updatedPoint);
-                                                                handleForwardClick("FORWARD")
-                                                                //handleChangeStatus(index, "FORWARD");
-                                                            }}
-                                                        >
-                                                            Forward
-                                                        </Button>
-                                                    )}
-                                                    {point.DecisionStatus !== "AGREE" && point.DecisionStatus !== "FORWARD" && (
-                                                        <Button
-                                                            variant="outlined"
-                                                            sx={{
-                                                                width: '100px',
-                                                                color: "red",
-                                                                borderColor: "red",
-                                                                backgroundColor: "#fdecec",
-                                                                textTransform: "none",
-                                                                borderRadius: "14px",
-                                                                fontSize: '10px',
-                                                                gap: 0.5,
-                                                                "&:hover": {
-                                                                    backgroundColor: "#f8d7da",
-                                                                },
-                                                            }}
-                                                            onClick={() => {
-                                                                var updatedPoint = point;
-                                                                updatedPoint.DecisionIndex = index;
-                                                                console.log(meetingAgenda)
-                                                                setSelectedPoint(updatedPoint);
-                                                                handleForwardClick("DISAGREE")
-                                                                //handleChangeStatus(index, "DISAGREE");
-                                                            }}
-                                                        >
-                                                            Not Agree
-                                                        </Button>
-                                                    )}
-                                                </Box>
-                                            </TableCell>
-
-                                            <TableCell sx={{ ...mergedCellStyle, p: 1 }}>
-                                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                                        <>
+                                            <TableRow key={index}>
+                                                <TableCell sx={{ ...mergedCellStyle, textAlign: "center" }}>{index + 1}</TableCell>
+                                                <TableCell sx={{ ...mergedCellStyle, fontWeight: "normal", maxWidth: "300px" }}>
                                                     <TextField
                                                         variant="standard"
-                                                        placeholder="Select Member"
+                                                        placeholder="Enter discussion topic"
+                                                        multiline
                                                         fullWidth
-                                                        disabled={isRowDisabled}
+                                                        minRows={1}
+                                                        maxRows={4}
+                                                        value={point.point_name}
                                                         InputProps={{
                                                             disableUnderline: true,
-                                                            sx: isRowDisabled ? disabledStyle : {}
+                                                            sx: { fontSize: '14px', fontWeight: 'bold' }
                                                         }}
-                                                        value={point.responsible}
-                                                        onChange={(e) => handleChange(index, 'responsible', e.target.value)}
-                                                        sx={{
-                                                            px: 1,
-                                                            py: 0.5,
-                                                            borderRadius: 1,
-                                                            bgcolor: isRejected(point.responsibleId) ? '#ffe5e5' : 'transparent',
-                                                            fontWeight: isRejected(point.responsibleId) ? 'bold' : 'normal',
-                                                            color: isRejected(point.responsibleId) ? 'error.main' : 'inherit',
-                                                        }}
+                                                        onChange={(e) => handleChange(index, 'point_name', e.target.value)}
                                                     />
-                                                    {isRejected(point.responsibleId) && (
-                                                        <Typography
-                                                            component="a"
-                                                            onClick={() => handleViewReason(point.responsibleId, point.responsible)}
-                                                            sx={{
-                                                                fontSize: '0.8rem',
-                                                                color: 'error.main',
-                                                                cursor: 'pointer',
-                                                                textDecoration: 'underline',
-                                                                ml: 1
+                                                </TableCell>
+                                                <TableCell sx={mergedCellStyle}>
+                                                    <TextField
+                                                        variant="standard"
+                                                        placeholder="Add remarks"
+                                                        fullWidth
+                                                        defaultValue={point.remarks_by_admin}
+                                                        onChange={(e) => handleChange(index, 'remarks_by_admin', e.target.value)}
+                                                        InputProps={{ disableUnderline: true }}
+                                                    />
+                                                </TableCell>
+
+                                                <TableCell sx={{ ...cellStyle, textAlign: "center" }}>
+                                                    <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 1, alignItems: 'center' }}>
+                                                        {point.DecisionStatus !== "DISAGREE" && point.DecisionStatus !== "FORWARD" && (
+                                                            <Button
+                                                                variant="outlined"
+                                                                sx={{
+                                                                    width: '100px',
+                                                                    color: "green",
+                                                                    borderColor: "green",
+                                                                    backgroundColor: "#e6f8e6",
+                                                                    textTransform: "none",
+                                                                    borderRadius: "14px",
+                                                                    fontSize: '10px',
+                                                                    gap: 0.5,
+                                                                    "&:hover": {
+                                                                        backgroundColor: "#d4edda",
+                                                                    },
+                                                                }}
+                                                                onClick={() => {
+                                                                    var updatedPoint = point;
+                                                                    updatedPoint.DecisionIndex = index;
+                                                                    setSelectedPoint(updatedPoint);
+                                                                    handleForwardClick("AGREE")
+
+                                                                    //handleChangeStatus(index, "AGREE");
+                                                                }}
+                                                            >
+                                                                Agree
+                                                            </Button>
+                                                        )}
+                                                        {point.DecisionStatus !== "DISAGREE" && point.DecisionStatus !== "AGREE" && (
+                                                            <Button
+                                                                variant="outlined"
+                                                                sx={{
+                                                                    width: '100px',
+                                                                    color: "black",
+                                                                    borderColor: "black",
+                                                                    backgroundColor: "#D8DEE2",
+                                                                    textTransform: "none",
+                                                                    borderRadius: "14px",
+                                                                    fontSize: '10px',
+                                                                    gap: 0.5,
+                                                                }}
+                                                                onClick={() => {
+                                                                    var updatedPoint = point;
+                                                                    updatedPoint.DecisionIndex = index;
+                                                                    setSelectedPoint(updatedPoint);
+                                                                    handleForwardClick("FORWARD")
+                                                                    //handleChangeStatus(index, "FORWARD");
+                                                                }}
+                                                            >
+                                                                Forward
+                                                            </Button>
+                                                        )}
+                                                        {point.DecisionStatus !== "AGREE" && point.DecisionStatus !== "FORWARD" && (
+                                                            <Button
+                                                                variant="outlined"
+                                                                sx={{
+                                                                    width: '100px',
+                                                                    color: "red",
+                                                                    borderColor: "red",
+                                                                    backgroundColor: "#fdecec",
+                                                                    textTransform: "none",
+                                                                    borderRadius: "14px",
+                                                                    fontSize: '10px',
+                                                                    gap: 0.5,
+                                                                    "&:hover": {
+                                                                        backgroundColor: "#f8d7da",
+                                                                    },
+                                                                }}
+                                                                onClick={() => {
+                                                                    var updatedPoint = point;
+                                                                    updatedPoint.DecisionIndex = index;
+                                                                    console.log(meetingAgenda)
+                                                                    setSelectedPoint(updatedPoint);
+                                                                    handleForwardClick("DISAGREE")
+                                                                    //handleChangeStatus(index, "DISAGREE");
+                                                                }}
+                                                            >
+                                                                Not Agree
+                                                            </Button>
+                                                        )}
+                                                    </Box>
+                                                </TableCell>
+
+                                                <TableCell sx={{ ...mergedCellStyle, p: 1 }}>
+                                                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                                                        <Autocomplete
+                                                            disableClearable
+                                                            options={getNonRejectedMembers()}
+                                                            getOptionLabel={(option) => option.name}
+                                                            value={allMembers.find(member => member.id === point.responsibleId) || null}
+                                                            onChange={(event, newValue) => {
+                                                                if (newValue) {
+                                                                    handleChange(index, 'responsible', newValue.name);
+                                                                    handleChange(index, 'responsibleId', newValue.id);
+                                                                }
                                                             }}
+                                                            renderInput={(params) => (
+                                                                <TextField
+                                                                    {...params}
+                                                                    variant="standard"
+                                                                    placeholder="Select Member"
+                                                                    fullWidth
+                                                                    InputProps={{
+                                                                        ...params.InputProps,
+                                                                        disableUnderline: true,
+                                                                        sx: {}
+                                                                    }}
+                                                                    sx={{
+                                                                        px: 1,
+                                                                        py: 0.5,
+                                                                        borderRadius: 1,
+                                                                        bgcolor: isRejected(point.responsibleId) ? '#ffe5e5' : 'transparent',
+                                                                    }}
+                                                                />
+                                                            )}
+                                                            sx={{
+                                                                minWidth: 200,
+                                                                '& .MuiAutocomplete-popupIndicator': {
+                                                                    display: 'flex'
+                                                                }
+                                                            }}
+                                                        />
+                                                        {isRejected(point.responsibleId) && (
+                                                            <Typography
+                                                                component="a"
+                                                                onClick={() => handleViewReason(point.responsibleId, point.responsible)}
+                                                                sx={{
+                                                                    fontSize: '0.8rem',
+                                                                    color: 'error.main',
+                                                                    cursor: 'pointer',
+                                                                    textDecoration: 'underline',
+                                                                    ml: 1
+                                                                }}
+                                                            >
+                                                                View reason
+                                                            </Typography>
+                                                        )}
+                                                    </Box>
+                                                </TableCell>
+
+                                                {/* Show reason popup */}
+                                                {selectedReason && (
+                                                    <Reason data={selectedReason} onClose={() => setSelectedReason(null)} />
+                                                )}
+                                                <TableCell sx={{ position: "relative", ...cellStyle }}>
+                                                    <TextField
+                                                        variant="standard"
+                                                        placeholder="Select Date"
+                                                        fullWidth
+                                                        InputProps={{ disableUnderline: true, style: { fontStyle: 'italic' } }}
+                                                        value={point.point_deadline ? format(new Date(point.point_deadline), 'dd MMM yyyy') : selectedDate[index] || ""}
+                                                        onClick={() => setOpenDateIndex(index)}
+                                                        readOnly
+                                                    />
+
+                                                    {openDateIndex === index && (
+                                                        <Box
+                                                            sx={{
+                                                                position: "fixed",
+                                                                top: 0,
+                                                                left: 0,
+                                                                width: "100vw",
+                                                                height: "100vh",
+                                                                backgroundColor: "rgba(0, 0, 0, 0.5)",
+                                                                zIndex: 5,
+                                                                display: "flex",
+                                                                justifyContent: "center",
+                                                                alignItems: "center",
+                                                            }}
+                                                            onClick={() => setOpenDateIndex(null)}
                                                         >
-                                                            View reason
-                                                        </Typography>
+                                                            <Box
+                                                                onClick={(e) => e.stopPropagation()}
+                                                            >
+                                                                <DatePick
+                                                                    onConfirm={(date) => handleDateConfirm(date, index)}
+                                                                    onClose={() => setOpenDateIndex(null)}
+                                                                />
+                                                            </Box>
+                                                        </Box>
                                                     )}
-                                                </Box>
-                                            </TableCell>
-
-                                            {/* Show reason popup */}
-                                            {selectedReason && (
-                                                <Reason data={selectedReason} onClose={() => setSelectedReason(null)} />
-                                            )}
-
-                                            <TableCell sx={mergedCellStyle}>
-                                                <TextField
-                                                    variant="standard"
-                                                    placeholder="Select Date"
-                                                    fullWidth
-                                                    disabled={isRowDisabled}
-                                                    InputProps={{
-                                                        disableUnderline: true,
-                                                        sx: isRowDisabled ? disabledStyle : {}
-                                                    }}
-                                                    value={point.point_deadline ? format(new Date(point.point_deadline), 'dd MMM yyyy') : 'NIL'}
-                                                    onChange={(e) => handleChange(index, 'point_deadline', e.target.value)}
-                                                />
-                                            </TableCell>
-                                        </TableRow>)
+                                                </TableCell>
+                                            </TableRow>
+                                        </>)
                                 })}
-                            </TableBody>
+                                <TableRow>
+                                    <TableCell colSpan={6} sx={{ border: 0, padding: 0 }}>
+                                        <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", border: "2px dashed #1976d2", margin: "auto", padding: "8px", color: "#1976d2", cursor: "pointer" }}
+                                            onClick={handleAddTopic}
+                                        >
+                                            <AddCircleOutlineIcon sx={{ marginRight: 1 }} />
+                                            <Typography>Add New Points</Typography>
+                                        </Box>
+                                    </TableCell>
+                                </TableRow>
+                            </TableBody >
                         </Table>
+                        <button onClick={() => submitPoints()}>Save</button>
                     </TableContainer>
                 ) : (
                     <TableContainer sx={{ margin: "auto", border: "1px solid #ddd", borderTop: "none" }}>
@@ -933,7 +1065,7 @@ export default function StartMeet({ handleBack }) {
                                                     variant="standard"
                                                     placeholder="Add remarks"
                                                     fullWidth
-                                                    disabled={isRowDisabled}
+                                                    disabled={true}
                                                     InputProps={{
                                                         disableUnderline: true,
                                                         sx: disabledStyle
@@ -1061,6 +1193,7 @@ export default function StartMeet({ handleBack }) {
                                                 />
                                             </TableCell>
                                         </TableRow>
+
                                     );
                                 })}
                             </TableBody>

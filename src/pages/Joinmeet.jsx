@@ -816,7 +816,7 @@ export default function JoinMeet() {
 
                                             const ForwardPointData = meetingAgenda.find(item => item.id === point.pointId);
                                             console.log(ForwardPointData)
-                                            if (ForwardPointData?.forward_info.type == 'NIL') {
+                                            if (ForwardPointData?.forward_info?.type == 'NIL') {
                                                 ForwardPointData.forward_info.text = ''
                                             }
 

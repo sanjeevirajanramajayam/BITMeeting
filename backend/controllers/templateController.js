@@ -14,7 +14,7 @@ const getCategories = async (req, res) => {
 }
 
 const createTemplate = async (req, res) => {
-    const {cd,
+    const {
         name,
         description,
         repeatType,

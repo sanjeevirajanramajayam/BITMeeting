@@ -26,24 +26,46 @@ function groupMembersByRole(data) {
 const insertForwardedPoints = async (meetingId, templateId, userId) => {
     try {
         const [futurePoints] = await db.query(
-            `SELECT point_id FROM meeting_point_future 
-             WHERE template_id = ? AND user_id = ? AND forwarded_decision = 'false' AND forward_type != 'NIL'`,
+            `SELECT mpf.point_id, mpf.forwarded_decision, mp.point_name, mp.point_responsibility, mp.point_deadline, mp.todo, mp.remarks
+             FROM meeting_point_future mpf
+             JOIN meeting_points mp ON mp.id = mpf.point_id
+             WHERE mpf.template_id = ? 
+               AND mpf.user_id = ? 
+               AND mpf.forwarded_decision = 'false' 
+               AND mpf.forward_type != 'NIL'
+               AND mpf.add_point_meeting = 'true'`,
             [templateId, userId]
         );
 
-        console.log(userId, meetingId, templateId, futurePoints)
 
-        const pointIds = futurePoints.map(p => p.point_id);
 
-        if (pointIds.length > 0) {
-            await db.query(
-                `INSERT INTO meeting_points (meeting_id, point_name, point_responsibility, point_deadline, todo, remarks)
-                 SELECT ?, point_name, point_responsibility, point_deadline, todo, remarks 
-                 FROM meeting_points 
-                 WHERE id IN (?)`,
-                [meetingId, pointIds]
-            );
+        console.log(userId, meetingId, templateId, futurePoints);
 
+        for (const point of futurePoints) {
+            if (point.forwarded_decision === 'AGREE') {
+                await db.query(
+                    `INSERT INTO meeting_points (meeting_id, point_name, point_responsibility, point_deadline, todo, remarks)
+                     VALUES (?, ?, ?, ?, ?, ?)`,
+                    [
+                        meetingId,
+                        point.point_name,
+                        point.point_responsibility,
+                        point.point_deadline,
+                        point.todo,
+                        point.remarks
+                    ]
+                );
+            } else {
+                await db.query(
+                    `INSERT INTO meeting_points (meeting_id, point_name)
+                     VALUES (?, ?)`,
+                    [meetingId, point.point_name]
+                );
+            }
+        }
+
+        if (futurePoints.length > 0) {
+            const pointIds = futurePoints.map(p => p.point_id);
             await db.query(
                 `UPDATE meeting_point_future 
                  SET forwarded_decision = 'true'
@@ -51,12 +73,76 @@ const insertForwardedPoints = async (meetingId, templateId, userId) => {
                 [templateId, userId, pointIds]
             );
 
-            console.log(`Forwarded ${pointIds.length} points to meeting ${meetingId}.`);
+            console.log(`Forwarded ${futurePoints.length} points to meeting ${meetingId}.`);
         }
+
     } catch (error) {
         console.error("Error inserting forwarded points:", error);
     }
 };
+
+
+const approvePointForForwarding = async (req, res) => {
+    const {
+        pointId
+    } = req.body;
+    const userId = req.user.userId;
+
+    if (!pointId || !userId) {
+        return res.status(400).json({
+            message: "Missing pointId or unauthorized user."
+        });
+    }
+
+    try {
+        const [pointResult] = await db.query(
+            `SELECT meeting_id FROM meeting_points WHERE id = ?`,
+            [pointId]
+        );
+
+        if (pointResult.length === 0) {
+            return res.status(404).json({
+                message: "Point not found."
+            });
+        }
+
+        const meetingId = pointResult[0].meeting_id;
+
+        const [meetingResult] = await db.query(
+            `SELECT created_by FROM meeting WHERE id = ?`,
+            [meetingId]
+        );
+
+        if (meetingResult.length === 0) {
+            return res.status(404).json({
+                message: "Meeting not found."
+            });
+        }
+
+        if (meetingResult[0].created_by !== userId) {
+            return res.status(403).json({
+                message: "You are not authorized to approve this point."
+            });
+        }
+
+        await db.query(
+            `UPDATE meeting_point_future 
+             SET add_point_meeting = 'true'
+             WHERE point_id = ?`,
+            [pointId]
+        );
+
+        res.status(200).json({
+            message: "Point approved successfully."
+        });
+    } catch (error) {
+        console.error("Error approving point:", error);
+        res.status(500).json({
+            message: "Internal server error."
+        });
+    }
+}
+
 
 
 const getForwardedPoints = async (req, res) => {
@@ -74,8 +160,9 @@ const getForwardedPoints = async (req, res) => {
 
     try {
         const [forwardedPoints] = await db.query(
-            `SELECT point_id, forward_type, forward_decision 
-             FROM meeting_point_future 
+            `SELECT point_id, forward_type, forward_decision, point_name
+             FROM meeting_point_future JOIN
+             meeting_points ON meeting_point_future.point_id = meeting_points.id
              WHERE template_id = ? AND user_id = ? AND forwarded_decision = 'false' AND forward_type != 'NIL'`,
             [templateId, userId]
         );
@@ -1927,27 +2014,13 @@ async function updatePoint(req, res) {
         old_todo,
         meetingId
     } = req.body;
-    console.log(point_deadline)
 
-    point_deadline ? new Date(point_deadline).toISOString().slice(0, 19).replace('T', ' ') : null
+    console.log(point_deadline);
 
-    const accessUserId = req.user.userId;
+    // Normalize deadline format
+    point_deadline = point_deadline ? new Date(point_deadline).toISOString().slice(0, 19).replace('T', ' ') : null;
 
-    const [
-        [createdUserId]
-    ] = await db.query(
-        `SELECT created_by FROM meeting WHERE id = ?`,
-        [meetingId]
-    );
-
-    // if (createdUserId.created_by !== accessUserId) {
-    //     return res.status(403).json({
-    //         success: false,
-    //         message: `Authorization is required`
-    //     });
-    // }
-
-    // Convert frontend status to database enum
+    // Convert frontend approval status to DB enum
     const dbApprovalStatus =
         approved_by_admin === "Approve" ?
         "APPROVED" :
@@ -1955,62 +2028,99 @@ async function updatePoint(req, res) {
         "NOT APPROVED" :
         undefined;
 
+    // Check if point exists
+    const [existingPoints] = await db.query(
+        `SELECT id FROM meeting_points WHERE id = ?`,
+        [point_id]
+    );
+
+    // Common fields & values setup
     const fields = [];
     const values = [];
 
     if (point_name !== undefined) {
-        fields.push("point_name = ?");
+        fields.push("point_name");
         values.push(point_name);
     }
 
     if (todo !== undefined) {
-        fields.push("todo = ?");
+        fields.push("todo");
         values.push(todo);
     }
 
     if (point_status !== undefined) {
-        fields.push("point_status = ?");
+        fields.push("point_status");
         values.push(point_status);
     }
 
     if (responsibleId !== undefined) {
-        fields.push("point_responsibility = ?");
+        fields.push("point_responsibility");
         values.push(responsibleId);
     }
 
     if (point_deadline !== undefined) {
-        fields.push("point_deadline = ?");
+        fields.push("point_deadline");
         values.push(point_deadline);
     }
 
     if (dbApprovalStatus !== undefined) {
-        fields.push("approved_by_admin = ?");
+        fields.push("approved_by_admin");
         values.push(dbApprovalStatus);
     }
 
     if (old_todo !== undefined) {
-        fields.push("old_todo = ?");
+        fields.push("old_todo");
         values.push(old_todo);
     }
 
     if (fields.length === 0) {
         return res.status(400).json({
             success: false,
-            message: "No valid fields provided to update"
+            message: "No valid fields provided to update or insert"
         });
     }
 
-    values.push(point_id); // For WHERE clause
+    try {
+        if (existingPoints.length > 0) {
+            // Update
+            const updateFields = fields.map(field => `${field} = ?`).join(", ");
+            values.push(point_id); // for WHERE clause
 
-    const query = `UPDATE meeting_points SET ${fields.join(", ")} WHERE id = ?`;
+            const updateQuery = `UPDATE meeting_points SET ${updateFields} WHERE id = ?`;
+            await db.query(updateQuery, values);
 
-    await db.query(query, values);
+            return res.status(200).json({
+                success: true,
+                message: "Meeting point updated successfully",
+                point_id: point_id
+            });
 
-    return res.status(200).json({
-        success: true,
-        message: "Meeting point updated successfully"
-    });
+        } else {
+            // Insert
+            fields.push("meeting_id");
+            values.push(meetingId);
+
+            const placeholders = fields.map(() => "?").join(", ");
+
+            const insertQuery = `INSERT INTO meeting_points (${fields.join(", ")}) VALUES (${placeholders})`;
+            const [insertResult] = await db.query(insertQuery, values);
+
+            return res.status(201).json({
+                success: true,
+                message: "Meeting point created successfully",
+                point_id: insertResult.insertId
+            });
+        }
+
+    } catch (error) {
+        console.error("Error updating/inserting point:", error);
+        return res.status(500).json({
+            success: false,
+            message: "An error occurred while processing the meeting point"
+        });
+    }
 }
+
 
 
 const getMeetingStatus = async (req, res) => {
@@ -2091,5 +2201,6 @@ module.exports = {
     getUserMeetingResponse,
     getMeetingStatus,
     updatePoint,
-    getForwardedPoints
+    getForwardedPoints,
+    approvePointForForwarding
 }

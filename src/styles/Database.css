@@ -171,6 +171,8 @@
   text-transform: uppercase;
   cursor: pointer;
   user-select: none;
+  height: 60px; /* Match td height */
+  vertical-align: middle; /* Center content vertically */
 }
 
 .db-table th:hover {
@@ -186,6 +188,11 @@
   text-align: left;
   font-size: 14px;
   border-top: 1px solid #e5e7eb;
+  height: 60px; /* Add fixed height */
+  vertical-align: middle; /* Center content vertically */
+  white-space: nowrap; /* Prevent text wrapping */
+  overflow: hidden; /* Hide overflow */
+  text-overflow: ellipsis; /* Show ellipsis for overflow */
 }
 
 .db-table-header,

@@ -1,0 +1,1 @@
+onChange={(e) => handleChange(index, 'point_deadline', e.target.value)}

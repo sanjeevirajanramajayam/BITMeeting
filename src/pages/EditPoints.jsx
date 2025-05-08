@@ -19,6 +19,8 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import dayjs from 'dayjs';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import DatePick from "../components/date";
+
 
 // Table cell styles
 const cellStyle = {
@@ -64,6 +66,25 @@ export default function EditPoints({ handleBack }) {
     const [isForward, setIsForward] = useState(false);
     const [selectedAction, setSelectedAction] = useState(null);
     const [rejectionRecords, setRejectionRecords] = useState([]);
+    const [selectedDate, setSelectedDate] = useState({});
+    const [openDateIndex, setOpenDateIndex] = useState(null);
+    
+    const handleDateConfirm = (date, index) => {
+        const formattedDate = date.format("YYYY-MM-DD");
+        setSelectedDate((prev) => ({ ...prev, [index]: formattedDate }));
+
+        // Update the points state with the new deadline
+        setPoints(prevPoints => {
+            const updatedPoints = [...prevPoints];
+            updatedPoints[index] = {
+                ...updatedPoints[index],
+                point_deadline: formattedDate
+            };
+            return updatedPoints;
+        });
+
+        setOpenDateIndex(null);
+    };
 
 
 
@@ -96,8 +117,19 @@ export default function EditPoints({ handleBack }) {
             return;
         }
 
+        const formatMySQLDateTime = (date) => {
+            if (!date) return null;
+            return new Date(date).toISOString().slice(0, 19).replace('T', ' ');
+        };
 
-        const promises = points.map((point) =>
+        const updatedPoints = points.map(point => ({
+            ...point,
+            point_deadline: formatMySQLDateTime(point.point_deadline)
+        }));
+
+        console.log(updatedPoints)
+
+        const promises = updatedPoints.map((point) =>
             axios.post("http://localhost:5000/api/meetings/update-point", point, {
                 headers: {
                     Authorization: `Bearer ${token}`,
@@ -605,29 +637,43 @@ export default function EditPoints({ handleBack }) {
                                             <Reason data={selectedReason} onClose={() => setSelectedReason(null)} />
                                         )}
 
-                                        <TableCell sx={mergedCellStyle}>
-                                            <LocalizationProvider dateAdapter={AdapterDayjs}>
-                                                <DatePicker
-                                                    value={dayjs(point.point_deadline)}
-                                                    onChange={(newValue) => {
-                                                        // Format the date properly before updating state
-                                                        const formattedDate = newValue ? format(newValue.toDate(), 'yyyy-MM-dd') : null;
-                                                        handleChange(index, 'point_deadline', formattedDate);
+                                        <TableCell sx={{ position: "relative", ...cellStyle }}>
+                                            <TextField
+                                                variant="standard"
+                                                placeholder="Select Date"
+                                                fullWidth
+                                                InputProps={{ disableUnderline: true, style: { fontStyle: 'italic' } }}
+                                                value={point.point_deadline ? format(new Date(point.point_deadline), 'dd MMM yyyy') : selectedDate[index] || ""}
+                                                onClick={() => setOpenDateIndex(index)}
+                                                readOnly
+                                            />
+
+                                            {openDateIndex === index && (
+                                                <Box
+                                                    sx={{
+                                                        position: "fixed",
+                                                        top: 0,
+                                                        left: 0,
+                                                        width: "100vw",
+                                                        height: "100vh",
+                                                        backgroundColor: "rgba(0, 0, 0, 0.5)",
+                                                        zIndex: 5,
+                                                        display: "flex",
+                                                        justifyContent: "center",
+                                                        alignItems: "center",
                                                     }}
-                                                    renderInput={(params) => (
-                                                        <TextField
-                                                            {...params}
-                                                            variant="standard"
-                                                            fullWidth
-                                                            InputProps={{
-                                                                ...params.InputProps,
-                                                                disableUnderline: true,
-                                                                sx: {}
-                                                            }}
+                                                    onClick={() => setOpenDateIndex(null)}
+                                                >
+                                                    <Box
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    >
+                                                        <DatePick
+                                                            onConfirm={(date) => handleDateConfirm(date, index)}
+                                                            onClose={() => setOpenDateIndex(null)}
                                                         />
-                                                    )}
-                                                />
-                                            </LocalizationProvider>
+                                                    </Box>
+                                                </Box>
+                                            )}
                                         </TableCell>
                                     </TableRow>
                                 );
