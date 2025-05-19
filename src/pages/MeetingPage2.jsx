@@ -35,10 +35,10 @@ const ForwardingForm = ({ onClose, selectedAction: initialAction, remarks, point
       adminRemarks
     })
     console.log(forwardDecision)
-    if(forwardType != 'SPECIFIC_MEETING')
-    {
+    if (forwardType != 'SPECIFIC_MEETING') {
       templateId = null;
     }
+
 
     try {
       await axios.post('http://localhost:5000/api/meetings/forward-point', {
@@ -51,6 +51,7 @@ const ForwardingForm = ({ onClose, selectedAction: initialAction, remarks, point
           Authorization: `Bearer ${token}`,
         }
       });
+
 
       // console.log({
       //   pointId,
@@ -68,7 +69,14 @@ const ForwardingForm = ({ onClose, selectedAction: initialAction, remarks, point
         }
       });
 
-      handleChangeStatus(selectedPoint.DecisionIndex, selectedAction);
+      console.log(selectedPoint.DecisionIndex, selectedAction)
+      console.log(selectedPoint.SubPointIndex)
+      if (selectedPoint.SubPointIndex !== undefined && selectedPoint.SubPointIndex !== null) {
+        handleChangeStatus(selectedPoint.DecisionIndex, selectedAction, true, selectedPoint.SubPointIndex);
+      } else {
+        handleChangeStatus(selectedPoint.DecisionIndex, selectedAction);
+      }
+
 
       onClose()
 

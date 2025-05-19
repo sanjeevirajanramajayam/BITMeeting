@@ -1,3 +1,4 @@
+const { Mp } = require('@mui/icons-material');
 const db = require('../config/db');
 const {
     format
@@ -1188,7 +1189,6 @@ const getUserMeetings = async (req, res) => {
             }
         });
 
-        // Add creator meetings with default 'Admin' role (excluding rejected)
         creatorMeetings.forEach(({
             id: meeting_id
         }) => {
@@ -1208,17 +1208,17 @@ const getUserMeetings = async (req, res) => {
 
         const placeholders = meetingIds.map(() => '?').join(',');
 
-        // 3. Fetch full meeting details with creator's username
+        // Fetch meeting details with creator and venue names
         const [meetingDetails] = await db.query(
             `SELECT m.*, u.name AS created_by_username, v.name as venue_name
              FROM meeting m
-             JOIN users u JOIN venues v ON m.created_by = u.id AND
-             m.venue_id = v.id
+             JOIN users u ON m.created_by = u.id
+             JOIN venues v ON m.venue_id = v.id
              WHERE m.id IN (${placeholders})`,
             meetingIds
         );
 
-        // 4. Fetch all members of these meetings
+        // Fetch all members of these meetings
         const [meetingMembers] = await db.query(
             `SELECT mm.meeting_id, mm.user_id, mm.role, u.name
              FROM meeting_members mm
@@ -1227,54 +1227,39 @@ const getUserMeetings = async (req, res) => {
             meetingIds
         );
 
-        // 5. Fetch meeting points
+        // Fetch all meeting points (including subpoints)
         const [meetingPoints] = await db.query(
-            `SELECT mp.*, u.name FROM bit_meeting_test.meeting_points mp
-             LEFT JOIN bit_meeting_test.users u ON mp.point_responsibility = u.id
-             WHERE meeting_id IN (${placeholders})`,
+            `SELECT mp.*, u.name 
+             FROM meeting_points mp
+             LEFT JOIN users u ON mp.point_responsibility = u.id
+             WHERE mp.meeting_id IN (${placeholders})`,
             meetingIds
         );
 
-        // 6. Group members by meeting_id and group them under each role as a list
-        const membersByMeeting = [];
-
+        // Group members by meeting and role
+        const membersByMeeting = {};
         meetingMembers.forEach(member => {
             if (!membersByMeeting[member.meeting_id]) {
                 membersByMeeting[member.meeting_id] = {};
             }
-
             const roleGroup = membersByMeeting[member.meeting_id];
-
             if (!roleGroup[member.role]) {
                 roleGroup[member.role] = [];
             }
-
             roleGroup[member.role].push({
                 user_id: member.user_id,
                 name: member.name
             });
         });
 
-        // Convert role groups into a list: [{ role, members }]
-        const formattedMembersByMeeting = {};
+        const formattedMembersByMeeting = membersByMeeting;
 
-        Object.entries(membersByMeeting).forEach(([meetingId, roleMap]) => {
-            formattedMembersByMeeting[meetingId] = Object.entries(roleMap).map(
-                ([role, members]) => ({
-                    role,
-                    members
-                })
-            );
-        });
-
-
-        // 7. Group meeting points by meeting_id
+        // Handle points and nest subpoints
         const pointsByMeeting = {};
+        const pointIdMap = {};
+
         meetingPoints.forEach(point => {
-            if (!pointsByMeeting[point.meeting_id]) {
-                pointsByMeeting[point.meeting_id] = [];
-            }
-            pointsByMeeting[point.meeting_id].push({
+            const pointObj = {
                 point_id: point.id,
                 point_name: point.point_name,
                 todo: point.todo,
@@ -1282,23 +1267,40 @@ const getUserMeetings = async (req, res) => {
                 responsible: point.name,
                 responsibleId: point.point_responsibility,
                 point_deadline: point.point_deadline,
-                point_id: point.id,
                 approved_by_admin: point.approved_by_admin,
                 old_todo: point.old_todo,
-                remarks_by_admin: point.remarks_by_admin
-            });
+                remarks_by_admin: point.remarks_by_admin,
+                parent_point_id: point.parent_point_id,
+                meeting_id: point.meeting_id,
+                subpoints: []
+            };
+            pointIdMap[point.id] = pointObj;
         });
-        // 8. Add role info, members, and points to each meeting
+
+        Object.values(pointIdMap).forEach(point => {
+            if (point.parent_point_id) {
+                const parent = pointIdMap[point.parent_point_id];
+                if (parent) {
+                    parent.subpoints.push(point);
+                }
+            } else {
+                if (!pointsByMeeting[point.meeting_id]) {
+                    pointsByMeeting[point.meeting_id] = [];
+                }
+                pointsByMeeting[point.meeting_id].push(point);
+            }
+        });
+
+        // Combine all into final meeting object
         const finalMeetings = meetingDetails.map(meeting => ({
             ...meeting,
             created_by: meeting.created_by_username,
             created_by_id: meeting.created_by,
             role: meetingIdRoleMap.get(meeting.id),
-            members: membersByMeeting[meeting.id] || [],
+            members: formattedMembersByMeeting[meeting.id] || {},
             points: pointsByMeeting[meeting.id] || []
         }));
 
-        // Return the response
         res.status(200).json({
             success: true,
             meetings: finalMeetings
@@ -1312,6 +1314,8 @@ const getUserMeetings = async (req, res) => {
         });
     }
 };
+
+
 
 const rejectMeeting = async (req, res) => {
     const {
@@ -1652,7 +1656,8 @@ const getMeetingAgenda = async (req, res) => {
                 mp.point_status,
                 mp.point_deadline,
                 mp.point_responsibility AS responsible_user_id,
-                u.name AS responsible_user_name
+                u.name AS responsible_user_name,
+                mp.parent_point_id
              FROM meeting_points mp
              LEFT JOIN users u ON mp.point_responsibility = u.id
              WHERE mp.meeting_id = ?
@@ -1698,7 +1703,8 @@ const getMeetingAgenda = async (req, res) => {
                 remarks: point.remarks,
                 admin_remarks: point.remarks_by_admin,
                 deadline: point.point_deadline,
-                status: point.approved_by_admin || point.point_status || 'PENDING'
+                status: point.approved_by_admin || point.point_status || 'PENDING',
+                parent_point_id: point.parent_point_id
             };
 
             if (forwardingMap[point.id]) {
@@ -2002,124 +2008,160 @@ const verifyToken = (req, res, next) => {
     }
 };
 
-async function updatePoint(req, res) {
-    var {
-        point_id,
-        point_name,
-        todo,
-        point_status,
-        responsibleId,
-        point_deadline,
-        approved_by_admin,
-        old_todo,
-        meetingId
-    } = req.body;
-
-    console.log(point_deadline);
-
-    // Normalize deadline format
-    point_deadline = point_deadline ? new Date(point_deadline).toISOString().slice(0, 19).replace('T', ' ') : null;
-
-    // Convert frontend approval status to DB enum
-    const dbApprovalStatus =
-        approved_by_admin === "Approve" ?
-        "APPROVED" :
-        approved_by_admin === "Not Approve" ?
-        "NOT APPROVED" :
-        undefined;
-
-    // Check if point exists
-    const [existingPoints] = await db.query(
-        `SELECT id FROM meeting_points WHERE id = ?`,
-        [point_id]
-    );
-
-    // Common fields & values setup
-    const fields = [];
-    const values = [];
-
-    if (point_name !== undefined) {
-        fields.push("point_name");
-        values.push(point_name);
-    }
-
-    if (todo !== undefined) {
-        fields.push("todo");
-        values.push(todo);
-    }
-
-    if (point_status !== undefined) {
-        fields.push("point_status");
-        values.push(point_status);
-    }
-
-    if (responsibleId !== undefined) {
-        fields.push("point_responsibility");
-        values.push(responsibleId);
-    }
-
-    if (point_deadline !== undefined) {
-        fields.push("point_deadline");
-        values.push(point_deadline);
-    }
-
-    if (dbApprovalStatus !== undefined) {
-        fields.push("approved_by_admin");
-        values.push(dbApprovalStatus);
-    }
-
-    if (old_todo !== undefined) {
-        fields.push("old_todo");
-        values.push(old_todo);
-    }
-
-    if (fields.length === 0) {
-        return res.status(400).json({
-            success: false,
-            message: "No valid fields provided to update or insert"
-        });
-    }
-
-    try {
-        if (existingPoints.length > 0) {
-            // Update
-            const updateFields = fields.map(field => `${field} = ?`).join(", ");
-            values.push(point_id); // for WHERE clause
-
-            const updateQuery = `UPDATE meeting_points SET ${updateFields} WHERE id = ?`;
-            await db.query(updateQuery, values);
-
+    // updatePoint controller
+    async function updatePoint(req, res) {
+        const points = req.body.points;
+    
+        if (!Array.isArray(points) || points.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "No points provided for update"
+            });
+        }
+    
+        try {
+            const insertedPoints = []; // to return back to frontend
+    
+            for (let i = 0; i < points.length; i++) {
+                const point = points[i];
+                const isNewPoint = !point.point_id;
+    
+                const newPointId = await saveOrUpdatePoint(point);
+    
+                if (isNewPoint) {
+                    insertedPoints.push({ index: i, point_id: newPointId });
+                }
+    
+                if (point.subpoints && point.subpoints.length > 0) {
+                    for (let j = 0; j < point.subpoints.length; j++) {
+                        const sub = point.subpoints[j];
+                        const isNewSubpoint = !sub.point_id;
+    
+                        const newSubPointId = await saveOrUpdatePoint(
+                            { ...sub, meetingId: point.meetingId },
+                            newPointId
+                        );
+    
+                        if (isNewSubpoint) {
+                            insertedPoints.push({ index: `${i}-${j}`, point_id: newSubPointId });
+                        }
+                    }
+                }
+            }
+    
             return res.status(200).json({
                 success: true,
-                message: "Meeting point updated successfully",
-                point_id: point_id
+                message: "Points (and subpoints) updated successfully",
+                insertedPoints
             });
+        } catch (error) {
+            console.error("Error processing points:", error);
+            return res.status(500).json({
+                success: false,
+                message: "An error occurred while updating points",
+                error: error.message
+            });
+        }
+    }
+    
+    
+    // helper function to update or insert a point
+    async function saveOrUpdatePoint(data, parentPointId = null) {
+        let {
+            point_id,
+            point_name,
+            todo,
+            point_status,
+            responsibleId,
+            point_deadline,
+            approved_by_admin,
+            old_todo,
+            meetingId
+        } = data;
 
-        } else {
-            // Insert
+        point_deadline = point_deadline ?
+            new Date(point_deadline).toISOString().slice(0, 19).replace('T', ' ') :
+            null;
+
+        const dbApprovalStatus =
+            approved_by_admin === "Approve" ?
+            "APPROVED" :
+            approved_by_admin === "Not Approve" ?
+            "NOT APPROVED" :
+            undefined;
+
+        const [existingPoints] = await db.query(`SELECT id FROM meeting_points WHERE id = ?`, [point_id]);
+
+        const fields = [];
+        const values = [];
+
+        if (point_name !== undefined) {
+            fields.push("point_name");
+            values.push(point_name);
+        }
+
+        if (todo !== undefined) {
+            fields.push("todo");
+            values.push(todo);
+        }
+
+        if (point_status !== undefined) {
+            fields.push("point_status");
+            values.push(point_status);
+        }
+
+        if (responsibleId !== undefined) {
+            fields.push("point_responsibility");
+            values.push(responsibleId);
+        }
+
+        if (point_deadline !== undefined) {
+            fields.push("point_deadline");
+            values.push(point_deadline);
+        }
+
+        if (dbApprovalStatus !== undefined) {
+            fields.push("approved_by_admin");
+            values.push(dbApprovalStatus);
+        }
+
+        if (old_todo !== undefined) {
+            fields.push("old_todo");
+            values.push(old_todo);
+        }
+
+        if (parentPointId !== null) {
+            fields.push("parent_point_id");
+            values.push(parentPointId);
+        }
+
+        if (!existingPoints.length) {
+            // Insert case
+            if (!meetingId) {
+                throw new Error("Missing meeting_id for insert");
+            }
             fields.push("meeting_id");
             values.push(meetingId);
 
             const placeholders = fields.map(() => "?").join(", ");
-
             const insertQuery = `INSERT INTO meeting_points (${fields.join(", ")}) VALUES (${placeholders})`;
+
             const [insertResult] = await db.query(insertQuery, values);
+            return insertResult.insertId;
+        } else {
+            // Update case
+            if (fields.length === 0) return point_id;
 
-            return res.status(201).json({
-                success: true,
-                message: "Meeting point created successfully",
-                point_id: insertResult.insertId
-            });
+            const updateFields = fields.map(field => `${field} = ?`).join(", ");
+            values.push(point_id);
+
+            const updateQuery = `UPDATE meeting_points SET ${updateFields} WHERE id = ?`;
+            await db.query(updateQuery, values);
+
+            return point_id;
         }
-
-    } catch (error) {
-        console.error("Error updating/inserting point:", error);
-        return res.status(500).json({
-            success: false,
-            message: "An error occurred while processing the meeting point"
-        });
     }
-}
+
 
 
 
