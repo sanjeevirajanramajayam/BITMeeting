@@ -10,7 +10,7 @@ import OfflinePinIcon from '@mui/icons-material/OfflinePin';
 import axios from "axios";
 import { Autocomplete } from "@mui/material"; // Make sure this is imported
 
-const ForwardingForm = ({ onClose, selectedAction: initialAction, remarks, pointId, selectedPoint, handleChangeStatus }) => {
+const ForwardingForm = ({ onClose, selectedAction: initialAction, remarks, pointId, selectedPoint, handleChangeStatus, submitPoints }) => {
   const [selectedOption, setSelectedOption] = useState("NIL");
   const [selectedAction, setSelectedAction] = useState(initialAction || "DISAGREE");
   const [selectedTemplate, setSelectedTemplate] = useState(null);
@@ -21,6 +21,7 @@ const ForwardingForm = ({ onClose, selectedAction: initialAction, remarks, point
   }, [])
 
   const handleActionClick = (action) => {
+    submitPoints()
     setSelectedAction(action);
   };
 

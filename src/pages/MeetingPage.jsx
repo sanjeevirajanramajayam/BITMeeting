@@ -412,6 +412,7 @@ export default function StartMeet({ handleBack }) {
 
     // Handlers
     const handleForwardClick = (action) => {
+        submitPoints()
         setIsForward(true);
         setSelectedAction(action);
     };
@@ -1580,7 +1581,7 @@ export default function StartMeet({ handleBack }) {
                         onClick={() => setIsForward(false)}
                     >
                         <Box onClick={(e) => e.stopPropagation()}>
-                            <ForwardingForm onClose={() => setIsForward(false)} selectedAction={selectedAction} remarks={selectedPoint.remarks_by_admin || ''} pointId={selectedPoint.point_id || ''} selectedPoint={selectedPoint} handleChangeStatus={handleChangeStatus} />
+                            <ForwardingForm onClose={() => setIsForward(false)} selectedAction={selectedAction} remarks={selectedPoint.remarks_by_admin || ''} pointId={selectedPoint.point_id || ''} selectedPoint={selectedPoint} handleChangeStatus={handleChangeStatus} submitPoints={submitPoints} />
                         </Box>
                     </Box>
                 }
