@@ -734,8 +734,8 @@ const getUserResponsibilities = async (req, res) => {
                 u.name
             FROM meeting_points mp JOIN users u ON 
             mp.point_responsibility = u.id
-            WHERE mp.meeting_id = ? AND mp.point_responsibility = ?`,
-            [meetingId, userId]
+            WHERE mp.meeting_id = ?`,
+            [meetingId]
         );
 
         if (responsibilities.length === 0) {
@@ -1679,6 +1679,23 @@ const getMeetingAgenda = async (req, res) => {
             [id]
         );
 
+        // Get voting information for all points
+        const [votingInfo] = await db.query(
+            `SELECT 
+                mp.id as point_id,
+                COALESCE(pvs.votes_for, 0) as votes_for,
+                COALESCE(pvs.votes_against, 0) as votes_against,
+                COALESCE(pvs.votes_abstain, 0) as votes_abstain,
+                COALESCE(pvs.total_votes, 0) as total_votes,
+                CASE WHEN vss.is_active = TRUE THEN TRUE ELSE FALSE END as voting_active,
+                CASE WHEN pv.vote_type IS NOT NULL THEN pv.vote_type ELSE NULL END as user_vote
+             FROM meeting_points mp
+             LEFT JOIN point_vote_summary pvs ON mp.id = pvs.point_id
+             LEFT JOIN point_voting_sessions vss ON mp.id = vss.point_id AND vss.is_active = TRUE
+             LEFT JOIN point_votes pv ON mp.id = pv.point_id AND pv.user_id = ?
+             WHERE mp.meeting_id = ?`,
+            [accessUserId, id]
+        );
 
         // Create a map of forwarding info by point_id
         const forwardingMap = forwardingInfo.reduce((acc, info) => {
@@ -1686,6 +1703,19 @@ const getMeetingAgenda = async (req, res) => {
                 type: info.forward_type,
                 decision: info.forward_decision,
                 text: info.template_name ? `next ${info.template_name}` : null
+            };
+            return acc;
+        }, {});
+
+        // Create a map of voting info by point_id
+        const votingMap = votingInfo.reduce((acc, info) => {
+            acc[info.point_id] = {
+                votes_for: info.votes_for,
+                votes_against: info.votes_against,
+                votes_abstain: info.votes_abstain,
+                total_votes: info.total_votes,
+                voting_active: info.voting_active,
+                user_vote: info.user_vote
             };
             return acc;
         }, {});
@@ -1704,7 +1734,16 @@ const getMeetingAgenda = async (req, res) => {
                 admin_remarks: point.remarks_by_admin,
                 deadline: point.point_deadline,
                 status: point.approved_by_admin || point.point_status || 'PENDING',
-                parent_point_id: point.parent_point_id
+                parent_point_id: point.parent_point_id,
+                // Add voting information
+                voting: votingMap[point.id] || {
+                    votes_for: 0,
+                    votes_against: 0,
+                    votes_abstain: 0,
+                    total_votes: 0,
+                    voting_active: false,
+                    user_vote: null
+                }
             };
 
             if (forwardingMap[point.id]) {

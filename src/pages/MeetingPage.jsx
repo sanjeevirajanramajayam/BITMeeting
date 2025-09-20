@@ -14,6 +14,8 @@ import { useNavigate } from "react-router-dom";
 import { useLocation } from 'react-router-dom';
 import axios, { all } from "axios";
 import Reason from "../components/ViewReason";
+import VotingButtons from "../components/VotingButtons";
+import VotingDiagnostic from "../components/VotingDiagnostic";
 import { format } from "date-fns";
 import DatePick from "../components/date";
 import React from 'react';
@@ -75,7 +77,15 @@ export default function StartMeet({ handleBack }) {
     const [points, setPoints] = useState(
         meetingData.points.map(point => ({
             ...point,
-            point_status: point.point_status || ""
+            point_status: point.point_status || "",
+            voting: point.voting || {
+                votes_for: 0,
+                votes_against: 0,
+                votes_abstain: 0,
+                total_votes: 0,
+                voting_active: false,
+                user_vote: null
+            }
         }))
     );
 
@@ -125,7 +135,18 @@ export default function StartMeet({ handleBack }) {
                             Authorization: `Bearer ${token}`,
                         }
                     });
-                setMeetingAgenda(response.data.data.points);
+                const pointsWithVoting = response.data.data.points.map(point => ({
+                    ...point,
+                    voting: point.voting || {
+                        votes_for: 0,
+                        votes_against: 0,
+                        votes_abstain: 0,
+                        total_votes: 0,
+                        voting_active: false,
+                        user_vote: null
+                    }
+                }));
+                setMeetingAgenda(pointsWithVoting);
                 console.log(response.data.data)
             } catch (err) {
                 console.error(err)
@@ -139,7 +160,23 @@ export default function StartMeet({ handleBack }) {
         };
 
         fetchAgenda();
+        
+        // Fetch voting data after agenda is loaded
+        setTimeout(() => {
+            fetchVotingData();
+        }, 1000); // Small delay to ensure agenda is loaded first
     }, [meetingData.id]);
+
+    // Add useEffect for periodic voting data refresh when meeting is active
+    useEffect(() => {
+        if (onStart && meetingData?.id) {
+            const votingInterval = setInterval(() => {
+                fetchVotingData();
+            }, 5000); // Refresh every 5 seconds during active meeting
+
+            return () => clearInterval(votingInterval);
+        }
+    }, [onStart, meetingData?.id]);
 
     const handleAddSubpoint = (index) => {
         const updatedPoints = [...points]; // shallow copy of points
@@ -561,15 +598,158 @@ export default function StartMeet({ handleBack }) {
             }
         });
     }, [meetingAgenda]);
+
+    // Handle vote updates
+    const handleVoteUpdate = (pointId, updatedVotingData) => {
+        setPoints(prevPoints => 
+            prevPoints.map(point => 
+                point.point_id === pointId || point.id === pointId
+                    ? { ...point, voting: updatedVotingData }
+                    : point
+            )
+        );
+        
+        setMeetingAgenda(prevAgenda => 
+            prevAgenda.map(point => 
+                point.id === pointId
+                    ? { ...point, voting: updatedVotingData }
+                    : point
+            )
+        );
+    };
+
+    // Fetch voting data for all points from database
+    const fetchVotingData = async () => {
+        if (!meetingData?.id) return;
+
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.get(
+                `http://localhost:5000/api/voting/meeting/${meetingData.id}`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    }
+                }
+            );
+            
+            if (response.data.success) {
+                console.log('Admin voting data fetched:', response.data.data);
+                
+                // Update both points and meetingAgenda with voting data
+                const votingMap = {};
+                response.data.data.points.forEach(point => {
+                    votingMap[point.pointId] = {
+                        votes_for: point.summary.votes_for,
+                        votes_against: point.summary.votes_against,
+                        votes_abstain: point.summary.votes_abstain,
+                        total_votes: point.summary.total_votes,
+                        voting_active: point.votingActive,
+                        user_vote: null // Admin vote will be fetched separately if needed
+                    };
+                });
+
+                // Update points state
+                setPoints(prevPoints => 
+                    prevPoints.map(point => ({
+                        ...point,
+                        voting: votingMap[point.id] || votingMap[point.point_id] || point.voting
+                    }))
+                );
+
+                // Update meetingAgenda state
+                setMeetingAgenda(prevAgenda => 
+                    prevAgenda.map(point => ({
+                        ...point,
+                        voting: votingMap[point.id] || point.voting
+                    }))
+                );
+
+                // Fetch admin's individual votes
+                await Promise.all(
+                    response.data.data.points.map(async (point) => {
+                        try {
+                            const userVoteResponse = await axios.get(
+                                `http://localhost:5000/api/voting/point/${point.pointId}`,
+                                {
+                                    headers: {
+                                        Authorization: `Bearer ${token}`,
+                                    }
+                                }
+                            );
+                            
+                            if (userVoteResponse.data.success) {
+                                const userVote = userVoteResponse.data.data.userVote;
+                                
+                                // Update user vote in both states
+                                setPoints(prevPoints => 
+                                    prevPoints.map(p => 
+                                        (p.id === point.pointId || p.point_id === point.pointId)
+                                            ? { ...p, voting: { ...p.voting, user_vote: userVote } }
+                                            : p
+                                    )
+                                );
+
+                                setMeetingAgenda(prevAgenda => 
+                                    prevAgenda.map(p => 
+                                        p.id === point.pointId
+                                            ? { ...p, voting: { ...p.voting, user_vote: userVote } }
+                                            : p
+                                    )
+                                );
+                            }
+                        } catch (error) {
+                            console.log(`No admin vote found for point ${point.pointId}`);
+                        }
+                    })
+                );
+            }
+        } catch (error) {
+            console.error('Error fetching admin voting data:', error);
+        }
+    };
+
+    // Check if user is admin (meeting creator)
+    // Extract user ID from JWT token for accurate comparison
+    const getUserIdFromToken = () => {
+        try {
+            const token = localStorage.getItem('token');
+            if (token) {
+                const base64Url = token.split('.')[1];
+                const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+                const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+                    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+                }).join(''));
+                
+                const decoded = JSON.parse(jsonPayload);
+                return decoded.userId;
+            }
+        } catch (error) {
+            console.error('Error decoding token:', error);
+        }
+        return null;
+    };
+
+    const currentUserId = getUserIdFromToken();
+    const isAdmin = meetingData?.host_id === currentUserId;
+    console.log(meetingData, currentUserId)
     
-
-
-
-
+    console.log('MeetingPage Admin check:', { 
+        currentUserId, 
+        meetingCreatedBy: meetingData?.host_id, 
+        isAdmin 
+    });
 
     console.log(points)
     return (
         <Box>
+            {/* Diagnostic Component - Remove after debugging */}
+            {/* <VotingDiagnostic 
+                meetingData={meetingData} 
+                isAdmin={isAdmin} 
+                currentUserId={currentUserId} 
+            /> */}
+            
             {/* Header Section */}
             <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", gap: 50 }}>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
@@ -725,7 +905,7 @@ export default function StartMeet({ handleBack }) {
                             </TableRow>
 
                             <TableRow>
-                                <TableCell sx={cellStyle}>Meeting Description</TableCell>
+                                <TableCell sx={cellStyle}>Meeting Desc</TableCell>
                                 <TableCell colSpan={3} sx={cellStyle}>
                                     <TextField
                                         variant="standard"
@@ -889,18 +1069,19 @@ export default function StartMeet({ handleBack }) {
                             <TableHead>
                                 <TableRow>
                                     <TableCell width="5%" sx={{ ...headerCellStyle, textAlign: 'center' }}>S.No</TableCell>
-                                    <TableCell width="25%" sx={{ ...headerCellStyle, textAlign: 'center' }}>Points to be Discussed</TableCell>
-                                    <TableCell width="20%" sx={{ ...headerCellStyle, textAlign: 'center' }}>Remarks</TableCell>
+                                    <TableCell width="20%" sx={{ ...headerCellStyle, textAlign: 'center' }}>Points to be Discussed</TableCell>
+                                    <TableCell width="15%" sx={{ ...headerCellStyle, textAlign: 'center' }}>Remarks</TableCell>
                                     <TableCell width="10%" sx={{ ...headerCellStyle, textAlign: 'center' }}>Status</TableCell>
                                     <TableCell width="10%" sx={{ ...headerCellStyle, textAlign: 'center' }}>Responsibility</TableCell>
                                     <TableCell width="10%" sx={{ ...headerCellStyle, textAlign: 'center' }}>Deadline</TableCell>
+                                    <TableCell width="15%" sx={{ ...headerCellStyle, textAlign: 'center' }}>Voting</TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
                                 <>
                                     {points.map((point, index) => {
                                         const isRowDisabled = isRejected(point.responsibleId);
-
+                                        console.log(point)
                                         // Common style for disabled elements
                                         const disabledStyle = isRowDisabled ? {
                                             opacity: 1.0,
@@ -1120,6 +1301,17 @@ export default function StartMeet({ handleBack }) {
                                                             </Box>
                                                         )}
                                                     </TableCell>
+                                                    <TableCell sx={cellStyle}>
+                                                        <VotingButtons
+                                                            pointId={point.point_id}
+                                                            pointName={point.point_name}
+                                                            votingData={point.voting}
+                                                            onVoteUpdate={handleVoteUpdate}
+                                                            isAdmin={isAdmin}
+                                                            meetingStatus={meetingData?.meeting_status}
+                                                            compact={true}
+                                                        />
+                                                    </TableCell>
                                                 </TableRow>
 
                                                 {/* Subpoints */}
@@ -1330,11 +1522,22 @@ export default function StartMeet({ handleBack }) {
                                                                 </Box>
                                                             )}
                                                         </TableCell>
+                                                        <TableCell sx={cellStyle}>
+                                                            <VotingButtons
+                                                                pointId={subpoint.id}
+                                                                pointName={subpoint.point_name}
+                                                                votingData={subpoint.voting}
+                                                                onVoteUpdate={handleVoteUpdate}
+                                                                isAdmin={isAdmin}
+                                                                meetingStatus={meetingData?.meeting_status}
+                                                                compact={true}
+                                                            />
+                                                        </TableCell>
                                                     </TableRow>
                                                 ))}
 
                                                 <TableRow>
-                                                    <TableCell colSpan={6} sx={{ border: 0, padding: 0 }}>
+                                                    <TableCell colSpan={7} sx={{ border: 0, padding: 0 }}>
                                                         <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", border: "2px dashed #1976d2", margin: "auto", padding: "8px", color: "#1976d2", cursor: "pointer" }}
                                                             onClick={() => handleAddSubpoint(index)}
                                                         >
@@ -1347,7 +1550,7 @@ export default function StartMeet({ handleBack }) {
                                         )
                                     })}
                                     <TableRow>
-                                        <TableCell colSpan={6} sx={{ border: 0, padding: 0 }}>
+                                        <TableCell colSpan={7} sx={{ border: 0, padding: 0 }}>
                                             <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", border: "2px dashed #1976d2", margin: "auto", padding: "8px", color: "#1976d2", cursor: "pointer" }}
                                                 onClick={handleAddTopic}
                                             >
@@ -1361,14 +1564,35 @@ export default function StartMeet({ handleBack }) {
                             </TableBody>
 
                         </Table>
-                        <button onClick={() => submitPoints()}>Save</button>
+                        
+                        {/* Save Button */}
+                        <Box sx={{ display: 'flex', justifyContent: 'center', padding: '16px' }}>
+                            <Button
+                                variant="contained"
+                                onClick={() => submitPoints()}
+                                sx={{
+                                    backgroundColor: "#408FEA",
+                                    color: "white",
+                                    textTransform: "none",
+                                    borderRadius: "8px",
+                                    padding: "10px 30px",
+                                    fontSize: "14px",
+                                    fontWeight: "bold",
+                                    "&:hover": {
+                                        backgroundColor: "#357ae8"
+                                    }
+                                }}
+                            >
+                                💾 Save Meeting Points
+                            </Button>
+                        </Box>
                     </TableContainer>
                 ) : (
                     <TableContainer sx={{ margin: "auto", border: "1px solid #ddd", borderTop: "none" }}>
                         <Table sx={{ borderCollapse: "collapse" }}>
                             <TableHead>
                                 <TableRow>
-                                    <TableCell sx={headerCellStyle}>S.No</TableCell>
+                                    <TableCell sx={headerCellStyle}>S.N</TableCell>
                                     <TableCell sx={headerCellStyle}>Points to be Discussed</TableCell>
                                     <TableCell sx={headerCellStyle}>Todo</TableCell>
                                     <TableCell sx={headerCellStyle}>Status</TableCell>
@@ -1379,7 +1603,7 @@ export default function StartMeet({ handleBack }) {
                             <TableBody>
                                 {points.map((point, index) => {
                                     const isRowDisabled = isRejected(point.responsibleId);
-
+                                    console.log(point)
                                     // Common style for disabled elements
                                     const disabledStyle = isRowDisabled ? {
                                         opacity: 1.0,

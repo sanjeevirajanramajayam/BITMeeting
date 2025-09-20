@@ -12,6 +12,7 @@ import axios from "axios";
 import CancelIcon from '@mui/icons-material/Cancel';
 import CheckBoxIcon from '@mui/icons-material/CheckBox';
 import MeetingRejection from "../components/MeetingRejection";
+import VotingButtons from "../components/VotingButtons";
 import { FormatBold, FormatItalic, FormatUnderlined, FormatAlignLeft, FormatAlignCenter, FormatAlignRight, Link } from "@mui/icons-material";
 import image from "../assets/bannariammanheader.png";
 import format from "date-fns/format";
@@ -113,6 +114,9 @@ export default function JoinMeet() {
     const [pointData, setPointData] = useState([]);
     const [attendanceRecords, setAttendanceRecords] = useState([]);
     const [meetingAgenda, setMeetingAgenda] = useState([]);
+    const [votingData, setVotingData] = useState({});
+    const [currentUser, setCurrentUser] = useState(null);
+    const [isAdmin, setIsAdmin] = useState(false);
 
     const onBack = () => {
         navigate('/dashboard')
@@ -333,8 +337,21 @@ export default function JoinMeet() {
         if (meetingData) {
             setMeetingState();
             fetchMeetings();
+            checkUserRole();
+            fetchVotingData();
         }
     }, [meetingData]);
+
+    // Fetch voting data periodically when meeting is in progress
+    useEffect(() => {
+        if (onJoin && meetingData?.id) {
+            const votingInterval = setInterval(() => {
+                fetchVotingData();
+            }, 5000); // Refresh every 5 seconds
+
+            return () => clearInterval(votingInterval);
+        }
+    }, [onJoin, meetingData?.id]);
 
     const handleTodoChange = (pointId, value) => {
         setPointData(prevData =>
@@ -344,6 +361,100 @@ export default function JoinMeet() {
                     : point
             )
         );
+    };
+
+    // Voting functions
+    const handleVoteUpdate = (pointId, newVotingData) => {
+        setVotingData(prev => ({
+            ...prev,
+            [pointId]: newVotingData
+        }));
+    };
+
+    // Fetch voting data for all points
+    const fetchVotingData = async () => {
+        if (!meetingData?.id) return;
+
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.get(
+                `http://localhost:5000/api/voting/meeting/${meetingData.id}`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    }
+                }
+            );
+            
+            if (response.data.success) {
+                const votingMap = {};
+                
+                // First, get all the voting data from the meeting endpoint
+                response.data.data.points.forEach(point => {
+                    votingMap[point.pointId] = {
+                        point_id: point.pointId,
+                        votes_for: point.summary.votes_for,
+                        votes_against: point.summary.votes_against,
+                        votes_abstain: point.summary.votes_abstain,
+                        total_votes: point.summary.total_votes,
+                        voting_active: point.votingActive, // This is the key fix!
+                        user_vote: null // Will be fetched next
+                    };
+                });
+
+                // Now fetch user's specific votes for each point
+                await Promise.all(
+                    response.data.data.points.map(async (point) => {
+                        try {
+                            const userVoteResponse = await axios.get(
+                                `http://localhost:5000/api/voting/point/${point.pointId}`,
+                                {
+                                    headers: {
+                                        Authorization: `Bearer ${token}`,
+                                    }
+                                }
+                            );
+                            
+                            if (userVoteResponse.data.success && votingMap[point.pointId]) {
+                                votingMap[point.pointId].user_vote = userVoteResponse.data.data.userVote;
+                            }
+                        } catch (error) {
+                            console.log(`No user vote found for point ${point.pointId}`);
+                        }
+                    })
+                );
+
+                setVotingData(votingMap);
+                console.log('Fetched complete voting data:', votingMap);
+            }
+        } catch (error) {
+            console.error('Error fetching voting data:', error);
+        }
+    };
+
+    // Check if current user is admin/host
+    const checkUserRole = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            
+            // Decode token to get user info
+            if (token) {
+                const base64Url = token.split('.')[1];
+                const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+                const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+                    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+                }).join(''));
+                
+                const decoded = JSON.parse(jsonPayload);
+                setCurrentUser(decoded);
+                
+                // Check if user is admin (creator of meeting)
+                const userIsAdmin = decoded.userId === meetingData?.created_by;
+                setIsAdmin(userIsAdmin);
+            }
+        } catch (error) {
+            console.error('Error checking user role:', error);
+        }
     };
 
     const startMeeting = async () => {
@@ -367,7 +478,14 @@ export default function JoinMeet() {
         }
     }
 
-    console.log(pointData)
+    console.log('Joinmeet Debug:', {
+        pointData,
+        meetingData,
+        isAdmin,
+        currentUser,
+        votingData,
+        onJoin
+    });
 
     return (
         <Box sx={{
@@ -590,7 +708,7 @@ export default function JoinMeet() {
                                     </TableCell>
                                 </TableRow>
                                 <TableRow>
-                                    <TableCell sx={cellStyle}>Meeting Description</TableCell>
+                                    <TableCell sx={cellStyle}>Meeting Desc</TableCell>
                                     <TableCell colSpan={3} sx={{ ...cellStyle }}>
                                         <TextField
                                             variant="standard"
@@ -804,11 +922,12 @@ export default function JoinMeet() {
                                     <TableHead>
                                         <TableRow>
                                             <TableCell width="5%" sx={{ ...headerCellStyle, textAlign: 'center' }}>S.No</TableCell>
-                                            <TableCell width="30%" sx={{ ...headerCellStyle, textAlign: 'center' }}>Points to be Discussed</TableCell>
-                                            <TableCell width="20%" sx={{ ...headerCellStyle, textAlign: 'center' }}>Remarks</TableCell>
+                                            <TableCell width="25%" sx={{ ...headerCellStyle, textAlign: 'center' }}>Points to be Discussed</TableCell>
+                                            <TableCell width="15%" sx={{ ...headerCellStyle, textAlign: 'center' }}>Remarks</TableCell>
                                             <TableCell width="15%" sx={{ ...headerCellStyle, textAlign: 'center' }}>Status</TableCell>
                                             <TableCell width="15%" sx={{ ...headerCellStyle, textAlign: 'center' }}>Responsibility</TableCell>
-                                            <TableCell width="15%" sx={{ ...headerCellStyle, textAlign: 'center' }}>Deadline</TableCell>
+                                            <TableCell width="10%" sx={{ ...headerCellStyle, textAlign: 'center' }}>Deadline</TableCell>
+                                            <TableCell width="15%" sx={{ ...headerCellStyle, textAlign: 'center' }}>Voting</TableCell>
                                         </TableRow>
                                     </TableHead>
                                     <TableBody>
@@ -863,6 +982,17 @@ export default function JoinMeet() {
 
                                                     <TableCell sx={{ ...cellStyle, textAlign: "center" }}>{point.name || '-'}</TableCell>
                                                     <TableCell sx={{ ...cellStyle, textAlign: "center" }}>{point.point_deadline ? format(new Date(point.point_deadline), 'dd MMM yyyy') : '-'}</TableCell>
+                                                    <TableCell sx={{ ...cellStyle, textAlign: "center" }}>
+                                                        <VotingButtons
+                                                            pointId={point.pointId}
+                                                            pointName={point.point_name}
+                                                            votingData={votingData[point.pointId]}
+                                                            onVoteUpdate={handleVoteUpdate}
+                                                            isAdmin={isAdmin}
+                                                            meetingStatus={meetingData?.meeting_status || 'not_started'}
+                                                            compact={true}
+                                                        />
+                                                    </TableCell>
                                                 </TableRow>
                                             )
                                         })}
