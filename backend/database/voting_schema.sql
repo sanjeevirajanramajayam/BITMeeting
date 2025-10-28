@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS point_votes (
     id INT AUTO_INCREMENT PRIMARY KEY,
     point_id INT NOT NULL,
     user_id INT NOT NULL,
-    vote_type ENUM('for', 'against', 'abstain') NOT NULL,
+    vote_type ENUM('for', 'against') NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     
@@ -52,23 +52,17 @@ SELECT
     pv.point_id,
     COUNT(CASE WHEN pv.vote_type = 'for' THEN 1 END) as votes_for,
     COUNT(CASE WHEN pv.vote_type = 'against' THEN 1 END) as votes_against,
-    COUNT(CASE WHEN pv.vote_type = 'abstain' THEN 1 END) as votes_abstain,
     COUNT(*) as total_votes,
     GROUP_CONCAT(
         CASE WHEN pv.vote_type = 'for' 
-        THEN CONCAT(u.name, ' (', pv.vote_type, ')') 
+        THEN u.name
         END SEPARATOR ', '
     ) as voters_for,
     GROUP_CONCAT(
         CASE WHEN pv.vote_type = 'against' 
-        THEN CONCAT(u.name, ' (', pv.vote_type, ')') 
+        THEN u.name
         END SEPARATOR ', '
-    ) as voters_against,
-    GROUP_CONCAT(
-        CASE WHEN pv.vote_type = 'abstain' 
-        THEN CONCAT(u.name, ' (', pv.vote_type, ')') 
-        END SEPARATOR ', '
-    ) as voters_abstain
+    ) as voters_against
 FROM point_votes pv
 JOIN users u ON pv.user_id = u.id
 GROUP BY pv.point_id;

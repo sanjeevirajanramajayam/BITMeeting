@@ -1685,7 +1685,6 @@ const getMeetingAgenda = async (req, res) => {
                 mp.id as point_id,
                 COALESCE(pvs.votes_for, 0) as votes_for,
                 COALESCE(pvs.votes_against, 0) as votes_against,
-                COALESCE(pvs.votes_abstain, 0) as votes_abstain,
                 COALESCE(pvs.total_votes, 0) as total_votes,
                 CASE WHEN vss.is_active = TRUE THEN TRUE ELSE FALSE END as voting_active,
                 CASE WHEN pv.vote_type IS NOT NULL THEN pv.vote_type ELSE NULL END as user_vote

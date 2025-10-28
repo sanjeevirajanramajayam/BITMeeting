@@ -129,15 +129,13 @@ export default function EditPoints({ handleBack }) {
 
         console.log(updatedPoints)
 
-        const promises = updatedPoints.map((point) =>
-            axios.post("http://localhost:5000/api/meetings/update-point", point, {
+        
+        await axios.post("http://localhost:5000/api/meetings/update-point", {points: updatedPoints}, {
                 headers: {
                     Authorization: `Bearer ${token}`,
                 },
-            })
-        );
+            });
 
-        await Promise.all(promises);
         meetingData.points = points;
         // Navigate after successful submission
         navigate("/admin-access", { state: { meetingData } });

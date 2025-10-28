@@ -395,10 +395,11 @@ export default function JoinMeet() {
                         point_id: point.pointId,
                         votes_for: point.summary.votes_for,
                         votes_against: point.summary.votes_against,
-                        votes_abstain: point.summary.votes_abstain,
                         total_votes: point.summary.total_votes,
                         voting_active: point.votingActive, // This is the key fix!
-                        user_vote: null // Will be fetched next
+                        voters_for: point.summary.voters_for, // Add voter names
+                        voters_against: point.summary.voters_against, // Add voter names
+                        user_vote: null // Will be fetched next         
                     };
                 });
 
@@ -417,6 +418,14 @@ export default function JoinMeet() {
                             
                             if (userVoteResponse.data.success && votingMap[point.pointId]) {
                                 votingMap[point.pointId].user_vote = userVoteResponse.data.data.userVote;
+                                // Update voting_active state from individual point response (more accurate)
+                                votingMap[point.pointId].voting_active = userVoteResponse.data.data.votingActive;
+                                // Also update voter names from the individual point response
+                                const pointSummary = userVoteResponse.data.data.summary;
+                                if (pointSummary) {
+                                    votingMap[point.pointId].voters_for = pointSummary.voters_for;
+                                    votingMap[point.pointId].voters_against = pointSummary.voters_against;
+                                }
                             }
                         } catch (error) {
                             console.log(`No user vote found for point ${point.pointId}`);
@@ -426,6 +435,11 @@ export default function JoinMeet() {
 
                 setVotingData(votingMap);
                 console.log('Fetched complete voting data:', votingMap);
+                
+                // Debug: Log voting_active states for each point
+                Object.entries(votingMap).forEach(([pointId, data]) => {
+                    console.log(`Point ${pointId} voting_active: ${data.voting_active}`);
+                });
             }
         } catch (error) {
             console.error('Error fetching voting data:', error);

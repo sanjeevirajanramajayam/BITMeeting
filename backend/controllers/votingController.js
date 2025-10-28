@@ -13,10 +13,10 @@ const submitVote = async (req, res) => {
         });
     }
 
-    if (!['for', 'against', 'abstain'].includes(voteType)) {
+    if (!['for', 'against'].includes(voteType)) {
         return res.status(400).json({
             success: false,
-            message: 'Invalid vote type. Must be "for", "against", or "abstain"'
+            message: 'Invalid vote type. Must be "for" or "against"'
         });
     }
 
@@ -40,10 +40,12 @@ const submitVote = async (req, res) => {
         const meetingId = pointInfo[0].meeting_id;
         const meetingStatus = pointInfo[0].meeting_status;
 
-        // Check if user is a member of this meeting
+        // Check if user is a member of this meeting OR is the meeting creator/admin
         const [memberCheck] = await db.query(
-            `SELECT id FROM meeting_members WHERE meeting_id = ? AND user_id = ?`,
-            [meetingId, userId]
+            `SELECT id FROM meeting_members WHERE meeting_id = ? AND user_id = ?
+             UNION
+             SELECT id FROM meeting WHERE id = ? AND created_by = ?`,
+            [meetingId, userId, meetingId, userId]
         );
 
         if (memberCheck.length === 0) {
@@ -85,7 +87,7 @@ const submitVote = async (req, res) => {
             [pointId, userId, voteType]
         );
 
-        // Get updated vote summary
+        // Get updated vote summary with voter names
         const [voteSummary] = await db.query(
             `SELECT * FROM point_vote_summary WHERE point_id = ?`,
             [pointId]
@@ -101,8 +103,9 @@ const submitVote = async (req, res) => {
                     point_id: pointId,
                     votes_for: 0,
                     votes_against: 0,
-                    votes_abstain: 0,
-                    total_votes: 0
+                    total_votes: 0,
+                    voters_for: null,
+                    voters_against: null
                 }
             }
         });
@@ -139,10 +142,12 @@ const getPointVotes = async (req, res) => {
 
         const meetingId = pointInfo[0].meeting_id;
 
-        // Check if user is a member of this meeting
+        // Check if user is a member of this meeting OR is the meeting creator/admin
         const [memberCheck] = await db.query(
-            `SELECT id FROM meeting_members WHERE meeting_id = ? AND user_id = ?`,
-            [meetingId, userId]
+            `SELECT id FROM meeting_members WHERE meeting_id = ? AND user_id = ?
+             UNION
+             SELECT id FROM meeting WHERE id = ? AND created_by = ?`,
+            [meetingId, userId, meetingId, userId]
         );
 
         if (memberCheck.length === 0) {
@@ -175,11 +180,9 @@ const getPointVotes = async (req, res) => {
             point_id: parseInt(pointId),
             votes_for: 0,
             votes_against: 0,
-            votes_abstain: 0,
             total_votes: 0,
             voters_for: null,
-            voters_against: null,
-            voters_abstain: null
+            voters_against: null
         };
 
         res.status(200).json({
@@ -340,7 +343,6 @@ const endVotingSession = async (req, res) => {
                     point_id: pointId,
                     votes_for: 0,
                     votes_against: 0,
-                    votes_abstain: 0,
                     total_votes: 0
                 }
             }
@@ -383,11 +385,9 @@ const getMeetingVotes = async (req, res) => {
                 mp.point_name,
                 pvs.votes_for,
                 pvs.votes_against,
-                pvs.votes_abstain,
                 pvs.total_votes,
                 pvs.voters_for,
                 pvs.voters_against,
-                pvs.voters_abstain,
                 CASE 
                     WHEN pvs_active.is_active IS TRUE THEN TRUE 
                     ELSE FALSE 
@@ -411,11 +411,9 @@ const getMeetingVotes = async (req, res) => {
                     summary: {
                         votes_for: point.votes_for || 0,
                         votes_against: point.votes_against || 0,
-                        votes_abstain: point.votes_abstain || 0,
                         total_votes: point.total_votes || 0,
                         voters_for: point.voters_for,
-                        voters_against: point.voters_against,
-                        voters_abstain: point.voters_abstain
+                        voters_against: point.voters_against
                     }
                 }))
             }

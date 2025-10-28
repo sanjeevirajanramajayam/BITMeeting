@@ -63,12 +63,12 @@ Two new voting components have been created:
 ### For Meeting Participants
 
 1. **Join the Meeting**: Access the meeting page through your dashboard
-2. **Cast Your Vote**: When voting is active for a point, you'll see three buttons:
+2. **Cast Your Vote**: When voting is active for a point, you'll see two buttons:
    - 👍 **For** - Vote in favor of the point
-   - 👎 **Against** - Vote against the point  
-   - ⊖ **Abstain** - Choose not to take a position
+   - 👎 **Against** - Vote against the point
 3. **Change Your Vote**: You can change your vote anytime before voting ends
 4. **View Results**: See live vote counts and final results
+5. **View Voting Details**: Click the view button to see who voted for and against each point
 
 ## Features
 
@@ -78,9 +78,9 @@ Two new voting components have been created:
 - Change votes before session ends
 
 ### Comprehensive Results
-- Vote breakdown (For/Against/Abstain)
-- Percentage calculations
-- Visual progress bars
+- Vote breakdown (For/Against)
+- Detailed voter lists showing who voted for each option
+- Visual modal with voter names
 - Final verdict (PASSED/REJECTED/TIED)
 
 ### Security & Access Control
@@ -103,7 +103,7 @@ POST /api/voting/submit
 Headers: Authorization: Bearer <token>
 Body: {
   "pointId": 123,
-  "voteType": "for" // "for", "against", or "abstain"
+  "voteType": "for" // "for" or "against"
 }
 ```
 
